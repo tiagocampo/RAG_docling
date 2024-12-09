@@ -28,12 +28,24 @@ class DoclingProcessor:
         """Initialize Docling processor with proper format configurations."""
         # Configure pipeline options for PDF
         pdf_pipeline_options = PdfPipelineOptions()
-        # Disable OCR completely
+        
+        # Disable OCR but enable better text extraction
         pdf_pipeline_options.do_ocr = False
+        pdf_pipeline_options.extract_text = True
+        pdf_pipeline_options.extract_text_from_images = False
+        
+        # Enable better text extraction
+        pdf_pipeline_options.text_extraction_options.extract_text_from_vector = True
+        pdf_pipeline_options.text_extraction_options.extract_text_from_paths = True
+        pdf_pipeline_options.text_extraction_options.merge_close_texts = True
+        pdf_pipeline_options.text_extraction_options.detect_lists = True
+        pdf_pipeline_options.text_extraction_options.detect_titles = True
+        
         # Enable table structure without cell matching for better performance
         pdf_pipeline_options.do_table_structure = True
         pdf_pipeline_options.table_structure_options.do_cell_matching = False
-        # Enable image extraction
+        
+        # Enable image extraction with better settings
         pdf_pipeline_options.images_scale = 2.0
         pdf_pipeline_options.generate_page_images = True
         pdf_pipeline_options.generate_picture_images = True
@@ -281,27 +293,49 @@ class DoclingProcessor:
                 if img.get("page") == page_no
             ]
             
-            # Create chunk with context
-            chunk = {
-                "text": page.get("text") if isinstance(page, dict) else getattr(page, "text", ""),
-                "context": {
-                    "page_num": page_no,
-                    "header": next((section.get("title") for section in page_sections if section.get("is_header")), None),
-                    "section_type": next((section.get("type") for section in page_sections), "body"),
-                    "tables": [{
-                        "data": table.get("data", []),
-                        "rows": table.get("rows", 0),
-                        "cols": table.get("cols", 0),
-                        "location": table.get("location")
-                    } for table in page_tables],
-                    "images": [{
-                        "type": img.get("type"),
-                        "analysis": img.get("analysis"),
-                        "location": img.get("location")
-                    } for img in page_images]
+            # Get text content, trying multiple methods
+            text_content = ""
+            if isinstance(page, dict):
+                text_content = page.get("text", "")
+                if not text_content and "content" in page:
+                    # Try to get text from content items
+                    text_items = [item.get("text", "") for item in page["content"] 
+                                if isinstance(item, dict) and "text" in item]
+                    text_content = "\n".join(filter(None, text_items))
+            else:
+                text_content = getattr(page, "text", "")
+                if not text_content and hasattr(page, "content"):
+                    # Try to get text from content items
+                    text_items = [getattr(item, "text", "") for item in page.content 
+                                if hasattr(item, "text")]
+                    text_content = "\n".join(filter(None, text_items))
+            
+            if text_content.strip():
+                # Create chunk with context
+                chunk = {
+                    "text": text_content,
+                    "context": {
+                        "page_num": page_no,
+                        "header": next((section.get("title") for section in page_sections if section.get("is_header")), None),
+                        "section_type": next((section.get("type") for section in page_sections), "body"),
+                        "tables": [{
+                            "data": table.get("data", []),
+                            "rows": table.get("rows", 0),
+                            "cols": table.get("cols", 0),
+                            "location": table.get("location")
+                        } for table in page_tables],
+                        "images": [{
+                            "type": img.get("type"),
+                            "analysis": img.get("analysis"),
+                            "location": img.get("location")
+                        } for img in page_images]
+                    }
                 }
-            }
-            chunks.append(chunk)
+                chunks.append(chunk)
+                logger.info(f"Extracted text chunk from page {page_no} with {len(text_content)} characters")
+        
+        if not chunks:
+            logger.warning("No text chunks were extracted from the document")
         
         return chunks
     
