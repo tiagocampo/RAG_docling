@@ -188,3 +188,60 @@ class DoclingProcessor:
         except Exception as e:
             logger.error(f"Error analyzing image: {str(e)}")
             return "Error analyzing image content"
+    
+
+    def extract_text_with_context(self, file_path: str) -> List[Dict[str, Any]]:
+        """Extract text with context from a document.
+        
+        Args:
+            file_path: Path to the document file
+            
+        Returns:
+            List of dictionaries containing text chunks with metadata
+        """
+        logger.info(f"Extracting text with context from: {file_path}")
+        
+        # Convert file path to Path object
+        path = Path(file_path)
+        
+        # Convert and process the document
+        conversion_result = self.converter.convert(path)
+        
+        if conversion_result.status != ConversionStatus.SUCCESS:
+            logger.error(f"Document conversion failed: {conversion_result.error_message}")
+            raise Exception(f"Document conversion failed: {conversion_result.error_message}")
+        
+        chunks = []
+        # Process multimodal content
+        for content_text, content_md, content_dt, page_cells, page_segments, page in generate_multimodal_pages(conversion_result):
+            # Extract metadata
+            metadata = {
+                "page_number": page.page_no,
+                "markdown": content_md,
+                "cells": page_cells,
+                "segments": page_segments
+            }
+            
+            # Add image analysis if available
+            if hasattr(page, 'image') and page.image:
+                try:
+                    # Convert page image to bytes for analysis
+                    img_byte_arr = BytesIO()
+                    page.image.save(img_byte_arr, format='PNG')
+                    img_byte_arr = img_byte_arr.getvalue()
+                    
+                    # Analyze page content with vision model
+                    image_analysis = self.analyze_image(img_byte_arr)
+                    metadata["image_analysis"] = image_analysis
+                except Exception as e:
+                    logger.warning(f"Error analyzing page image: {str(e)}")
+            
+            # Create chunk with text and metadata
+            chunk = {
+                "text": content_text,
+                "metadata": metadata
+            }
+            chunks.append(chunk)
+        
+        logger.info(f"Extracted {len(chunks)} text chunks with context")
+        return chunks
