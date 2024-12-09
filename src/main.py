@@ -18,49 +18,61 @@ def display_document_structure():
         st.header("📑 Document Analysis")
         
         for filename, structure in st.session_state.document_structures.items():
-            with st.expander(f"📄 {filename}", expanded=True):
-                # Document metadata in a clean layout
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Pages", structure["num_pages"])
-                with col2:
-                    st.metric("Tables", structure["num_tables"])
-                with col3:
-                    st.metric("Figures", structure["num_figures"])
-                
-                # Document info in a nice container
-                with st.container():
-                    st.markdown("### 📌 Document Information")
-                    st.markdown(f"""
-                    - **Title:** {structure.get("title", "N/A")}
-                    - **Author:** {structure.get("author", "N/A")}
-                    - **Date:** {structure.get("date", "N/A")}
-                    """)
-                
-                # Sections in a collapsible container
-                if structure["sections"]:
-                    with st.container():
-                        st.markdown("### 📚 Document Sections")
-                        for section in structure["sections"]:
-                            st.markdown(f"- **{section['title']}** (Page {section['page']})")
-                
-                # Content preview in a scrollable container
-                if structure.get("content"):
-                    with st.expander("📝 Content Preview", expanded=False):
-                        for page in structure["content"]:
-                            with st.container():
-                                st.markdown(f"#### Page {page['page']}")
-                                st.text_area(
-                                    f"Content - Page {page['page']}",
-                                    value=page['text'],
-                                    height=150,
-                                    key=f"{filename}_page_{page['page']}",
-                                    disabled=True
-                                )
-                
-                # Named entities if available
-                if structure["num_entities"] > 0:
-                    st.metric("Named Entities", structure["num_entities"])
+            st.subheader(f"📄 {filename}")
+            
+            # Document metrics in a clean grid
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("📄 Pages", structure["num_pages"])
+            with col2:
+                st.metric("📊 Tables", structure["num_tables"])
+            with col3:
+                st.metric("📈 Figures", structure["num_figures"])
+            
+            # Document metadata in a clean card-like container
+            st.markdown("---")
+            st.markdown("### 📌 Document Information")
+            metadata_cols = st.columns([1, 2])
+            with metadata_cols[0]:
+                st.markdown("**Title:**")
+                st.markdown("**Author:**")
+                st.markdown("**Date:**")
+            with metadata_cols[1]:
+                st.markdown(f"{structure.get('title', 'N/A')}")
+                st.markdown(f"{structure.get('author', 'N/A')}")
+                st.markdown(f"{structure.get('date', 'N/A')}")
+            
+            # Sections in a clean list
+            if structure["sections"]:
+                st.markdown("---")
+                st.markdown("### 📚 Document Sections")
+                for section in structure["sections"]:
+                    st.markdown(f"- **{section['title']}** (Page {section['page']})")
+            
+            # Content preview in tabs instead of nested expanders
+            if structure.get("content"):
+                st.markdown("---")
+                st.markdown("### 📝 Content Preview")
+                tabs = st.tabs([f"Page {page['page']}" for page in structure["content"]])
+                for tab, page in zip(tabs, structure["content"]):
+                    with tab:
+                        st.text_area(
+                            label="Content",
+                            value=page['text'],
+                            height=200,
+                            disabled=True,
+                            label_visibility="collapsed"
+                        )
+            
+            # Named entities if available
+            if structure["num_entities"] > 0:
+                st.markdown("---")
+                st.markdown("### 🏷️ Named Entities")
+                st.metric("Entities Found", structure["num_entities"])
+            
+            # Add visual separation between documents
+            st.markdown("---")
+            st.markdown("")  # Extra space between documents
 
 def handle_api_key():
     """Handle API key input and storage."""
