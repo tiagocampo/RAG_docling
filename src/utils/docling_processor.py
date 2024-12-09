@@ -2,6 +2,7 @@ from typing import Dict, Any, List
 from pathlib import Path
 import logging
 from io import BytesIO
+import base64
 
 from docling.document_converter import (
     DocumentConverter,
@@ -18,8 +19,11 @@ from docling.utils.export import generate_multimodal_pages
 
 from graphs.chat_graph import get_model
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
+# Set up logging with more detailed format
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 class DoclingProcessor:
@@ -34,7 +38,6 @@ class DoclingProcessor:
         # Configure table detection
         pdf_pipeline_options.do_table_structure = True
         pdf_pipeline_options.table_structure_options.do_cell_matching = False
-        pdf_pipeline_options.table_structure_options.min_confidence = 0.5
         
         # Configure image extraction
         pdf_pipeline_options.images_scale = 2.0  # Higher resolution for better quality
@@ -184,8 +187,22 @@ class DoclingProcessor:
     def analyze_image(self, image_data: bytes) -> str:
         """Analyze image using LLM with vision capabilities."""
         try:
-            # Convert image to base64 for LLM processing
-            base64_image = base64.b64encode(image_data).decode('utf-8')
+            logger.info("Starting image analysis")
+            
+            # Validate image data
+            if not image_data:
+                logger.error("Empty image data received")
+                return "Error: No image data provided"
+            
+            logger.debug(f"Image data size: {len(image_data)} bytes")
+            
+            try:
+                # Convert image to base64
+                base64_image = base64.b64encode(image_data).decode('utf-8')
+                logger.debug(f"Successfully encoded image to base64 (length: {len(base64_image)})")
+            except Exception as e:
+                logger.error(f"Failed to encode image to base64: {str(e)}")
+                return f"Error encoding image: {str(e)}"
             
             # Create prompt for image analysis
             prompt = """Analyze this image and provide a detailed description of its contents.
@@ -197,20 +214,29 @@ class DoclingProcessor:
             
             Provide the description in a clear, concise format."""
             
-            # Use model's vision capabilities
-            response = self.model.invoke([{
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": "image/jpeg",
-                    "data": base64_image
-                }
-            }, {
-                "type": "text",
-                "text": prompt
-            }])
+            logger.info("Sending image to vision model for analysis")
             
-            return response.content
+            try:
+                # Use model's vision capabilities
+                response = self.model.invoke([{
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/jpeg",
+                        "data": base64_image
+                    }
+                }, {
+                    "type": "text",
+                    "text": prompt
+                }])
+                
+                logger.info("Successfully received response from vision model")
+                return response.content
+                
+            except Exception as e:
+                logger.error(f"Error during model invocation: {str(e)}", exc_info=True)
+                return f"Error analyzing image with model: {str(e)}"
+                
         except Exception as e:
-            logger.error(f"Error analyzing image: {str(e)}")
-            return "Error analyzing image content"
+            logger.error(f"Unexpected error in analyze_image: {str(e)}", exc_info=True)
+            return f"Unexpected error analyzing image: {str(e)}"
