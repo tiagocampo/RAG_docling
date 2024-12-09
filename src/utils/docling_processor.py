@@ -1,7 +1,8 @@
 from typing import Dict, Any, List
 from pathlib import Path
 import logging
-import json
+from io import BytesIO
+
 from docling.document_converter import (
     DocumentConverter,
     PdfFormatOption,
@@ -12,14 +13,10 @@ from docling.document_converter import (
 )
 from docling.datamodel.base_models import InputFormat, ConversionStatus
 from docling.datamodel.pipeline_options import PdfPipelineOptions
-from docling.pipeline.simple_pipeline import SimplePipeline
 from docling.pipeline.standard_pdf_pipeline import StandardPdfPipeline
-from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
 from docling.utils.export import generate_multimodal_pages
 
 from graphs.chat_graph import get_model
-import base64
-from io import BytesIO
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -31,18 +28,18 @@ class DoclingProcessor:
         # Configure pipeline options for PDF
         pdf_pipeline_options = PdfPipelineOptions()
         
-        # Configure text extraction
+        # Configure text extraction without OCR
         pdf_pipeline_options.do_ocr = False
         
         # Configure table detection
         pdf_pipeline_options.do_table_structure = True
-        pdf_pipeline_options.table_structure_options.do_cell_matching = True
-
+        pdf_pipeline_options.table_structure_options.do_cell_matching = False
+        pdf_pipeline_options.table_structure_options.min_confidence = 0.5
+        
         # Configure image extraction
         pdf_pipeline_options.images_scale = 2.0  # Higher resolution for better quality
         pdf_pipeline_options.generate_page_images = True
         pdf_pipeline_options.generate_picture_images = True
-
         
         # Initialize document converter with format-specific options
         self.converter = DocumentConverter(
@@ -58,15 +55,9 @@ class DoclingProcessor:
                     pipeline_cls=StandardPdfPipeline,
                     pipeline_options=pdf_pipeline_options
                 ),
-                InputFormat.DOCX: WordFormatOption(
-                    pipeline_cls=SimplePipeline
-                ),
-                InputFormat.PPTX: PowerpointFormatOption(
-                    pipeline_cls=SimplePipeline
-                ),
-                InputFormat.HTML: HTMLFormatOption(
-                    pipeline_cls=SimplePipeline
-                )
+                InputFormat.DOCX: WordFormatOption(),
+                InputFormat.PPTX: PowerpointFormatOption(),
+                InputFormat.HTML: HTMLFormatOption()
             }
         )
         
@@ -91,8 +82,20 @@ class DoclingProcessor:
         logger.info("Document converted successfully")
         
         # Process multimodal content
-        multimodal_content = []
+        pages = []
         for content_text, content_md, content_dt, page_cells, page_segments, page in generate_multimodal_pages(conversion_result):
+            page_info = {
+                "page_number": page.page_no,
+                "text": content_text,
+                "markdown": content_md,
+                "tables": page_cells,
+                "sections": page_segments,
+                "header": next((seg["text"] for seg in page_segments if seg.get("type") == "header"), None),
+                "section_type": next((seg["type"] for seg in page_segments if seg.get("type")), "content"),
+                "images": []
+            }
+            
+            # Process page images with LLM
             if hasattr(page, 'image') and page.image:
                 try:
                     # Convert page image to bytes for analysis
@@ -103,16 +106,15 @@ class DoclingProcessor:
                     # Analyze page content with vision model
                     analysis = self.analyze_image(img_byte_arr)
                     
-                    multimodal_content.append({
-                        "page": page.page_no,
-                        "text": content_text,
-                        "markdown": content_md,
-                        "cells": page_cells,
-                        "segments": page_segments,
-                        "image_analysis": analysis
+                    page_info["images"].append({
+                        "width": page.image.width,
+                        "height": page.image.height,
+                        "analysis": analysis
                     })
                 except Exception as e:
-                    logger.warning(f"Error processing page content: {str(e)}")
+                    logger.warning(f"Error processing page image: {str(e)}")
+            
+            pages.append(page_info)
         
         # Extract metadata
         metadata = {}
@@ -147,13 +149,39 @@ class DoclingProcessor:
             logger.warning(f"Error extracting metadata: {str(e)}")
             metadata = {}
         
-        # Export document structure
-        doc_dict = doc.export_to_dict()
-        doc_dict["metadata"] = metadata
-        doc_dict["multimodal_content"] = multimodal_content
+        # Prepare final document structure
+        doc_structure = {
+            "metadata": metadata,
+            "pages": pages,
+            "tables": [table.export_to_dict() for table in doc.tables],
+            "figures": [fig.export_to_dict() for fig in doc.figures],
+            "images": [img.export_to_dict() for img in doc.images],
+            "entities": doc.entities if hasattr(doc, 'entities') else []
+        }
         
-        logger.info(f"Document processing complete with {len(multimodal_content)} pages of content")
-        return doc_dict
+        logger.info(f"Document processing complete with {len(pages)} pages")
+        return doc_structure
+    
+    def extract_text_with_context(self, file_path: str) -> List[Dict[str, Any]]:
+        """Extract text with context from a document using process_document."""
+        doc_structure = self.process_document(file_path)
+        
+        chunks = []
+        for page in doc_structure["pages"]:
+            chunk = {
+                "text": page["text"],
+                "context": {
+                    "page_num": page["page_number"],
+                    "header": page["header"],
+                    "section_type": page["section_type"],
+                    "tables": page["tables"],
+                    "figures": [],  # Will be populated if figures are on this page
+                    "images": page["images"]
+                }
+            }
+            chunks.append(chunk)
+        
+        return chunks
     
     def analyze_image(self, image_data: bytes) -> str:
         """Analyze image using LLM with vision capabilities."""
@@ -162,7 +190,7 @@ class DoclingProcessor:
             base64_image = base64.b64encode(image_data).decode('utf-8')
             
             # Create prompt for image analysis
-            prompt = f"""Analyze this image and provide a detailed description of its contents.
+            prompt = """Analyze this image and provide a detailed description of its contents.
             Focus on:
             1. Main elements and their relationships
             2. Any text visible in the image
@@ -188,84 +216,3 @@ class DoclingProcessor:
         except Exception as e:
             logger.error(f"Error analyzing image: {str(e)}")
             return "Error analyzing image content"
-    
-
-    def extract_text_with_context(self, file_path: str) -> List[Dict[str, Any]]:
-        """Extract text with context from a document.
-        
-        Args:
-            file_path: Path to the document file
-            
-        Returns:
-            List of dictionaries containing text chunks with metadata and context
-        """
-        logger.info(f"Extracting text with context from: {file_path}")
-        
-        # Configure pipeline options for document processing
-        pipeline_options = PdfPipelineOptions()
-        pipeline_options.images_scale = 2.0  # Higher resolution for better quality
-        pipeline_options.generate_page_images = True
-        pipeline_options.generate_picture_images = True
-        pipeline_options.do_table_structure = True
-        pipeline_options.do_ocr = True
-        
-        # Update converter configuration
-        self.converter = DocumentConverter(
-            format_options={
-                InputFormat.PDF: PdfFormatOption(
-                    pipeline_options=pipeline_options
-                )
-            }
-        )
-        
-        # Convert file path to Path object
-        path = Path(file_path)
-        
-        # Convert and process the document
-        conversion_result = self.converter.convert(path)
-        
-        if conversion_result.status != ConversionStatus.SUCCESS:
-            logger.error(f"Document conversion failed: {conversion_result.error_message}")
-            raise Exception(f"Document conversion failed: {conversion_result.error_message}")
-        
-        chunks = []
-        # Process multimodal content
-        for content_text, content_md, content_dt, page_cells, page_segments, page in generate_multimodal_pages(conversion_result):
-            # Create context information
-            context = {
-                "page_num": page.page_no,
-                "document": conversion_result.input.file.name,
-                "document_type": "pdf",
-                "total_pages": len(conversion_result.document.pages),
-                "markdown": content_md,
-                "cells": page_cells,
-                "segments": page_segments
-            }
-            
-            # Add image analysis if available
-            if hasattr(page, 'image') and page.image:
-                try:
-                    # Convert page image to bytes for analysis
-                    img_byte_arr = BytesIO()
-                    page.image.save(img_byte_arr, format='PNG')
-                    img_byte_arr = img_byte_arr.getvalue()
-                    
-                    # Analyze page content with vision model
-                    image_analysis = self.analyze_image(img_byte_arr)
-                    context["image_analysis"] = image_analysis
-                    
-                    # Add image dimensions
-                    context["image_width"] = page.image.width
-                    context["image_height"] = page.image.height
-                except Exception as e:
-                    logger.warning(f"Error analyzing page image: {str(e)}")
-            
-            # Create chunk with text and context
-            chunk = {
-                "text": content_text,
-                "context": context
-            }
-            chunks.append(chunk)
-        
-        logger.info(f"Extracted {len(chunks)} text chunks with context")
-        return chunks
