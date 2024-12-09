@@ -204,31 +204,43 @@ class DoclingProcessor:
                 logger.error(f"Failed to encode image to base64: {str(e)}")
                 return f"Error encoding image: {str(e)}"
             
-            # Create prompt for image analysis
-            prompt = """Analyze this image and provide a detailed description of its contents.
-            Focus on:
-            1. Main elements and their relationships
-            2. Any text visible in the image
-            3. Charts, diagrams, or visual data
-            4. Key information that would be relevant for document understanding
-            
-            Provide the description in a clear, concise format."""
+            # Create messages for the model
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant that analyzes images and provides detailed descriptions."
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/jpeg",
+                                "data": base64_image
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": """Analyze this image and provide a detailed description of its contents.
+                            Focus on:
+                            1. Main elements and their relationships
+                            2. Any text visible in the image
+                            3. Charts, diagrams, or visual data
+                            4. Key information that would be relevant for document understanding
+                            
+                            Provide the description in a clear, concise format."""
+                        }
+                    ]
+                }
+            ]
             
             logger.info("Sending image to vision model for analysis")
             
             try:
                 # Use model's vision capabilities
-                response = self.model.invoke([{
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/jpeg",
-                        "data": base64_image
-                    }
-                }, {
-                    "type": "text",
-                    "text": prompt
-                }])
+                response = self.model.invoke(messages)
                 
                 logger.info("Successfully received response from vision model")
                 return response.content
