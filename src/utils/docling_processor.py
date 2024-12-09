@@ -86,6 +86,8 @@ class DoclingProcessor:
         
         # Process multimodal content
         pages = []
+        total_images = 0  # Counter for total images
+        
         for content_text, content_md, content_dt, page_cells, page_segments, page in generate_multimodal_pages(conversion_result):
             page_info = {
                 "page_number": page.page_no,
@@ -109,11 +111,14 @@ class DoclingProcessor:
                     # Analyze page content with vision model
                     analysis = self.analyze_image(img_byte_arr)
                     
-                    page_info["images"].append({
+                    image_info = {
                         "width": page.image.width,
                         "height": page.image.height,
                         "analysis": analysis
-                    })
+                    }
+                    page_info["images"].append(image_info)
+                    total_images += 1
+                    logger.info(f"Processed image on page {page.page_no}")
                 except Exception as e:
                     logger.warning(f"Error processing page image: {str(e)}")
             
@@ -152,15 +157,21 @@ class DoclingProcessor:
             logger.warning(f"Error extracting metadata: {str(e)}")
             metadata = {}
         
+        # Count tables from page_cells
+        total_tables = sum(1 for page in pages if page["tables"])
+        
         # Prepare final document structure
         doc_structure = {
             "metadata": metadata,
             "pages": pages,
             "tables": [table.export_to_dict() for table in getattr(doc, 'tables', [])],
-            "images": [img.export_to_dict() for img in getattr(doc, 'images', [])]
+            "images": [{"page": page["page_number"], "images": page["images"]} for page in pages if page["images"]],
+            "total_images": total_images,
+            "total_tables": total_tables,
+            "total_pages": len(pages)
         }
         
-        logger.info(f"Document processing complete with {len(pages)} pages")
+        logger.info(f"Document processing complete with {len(pages)} pages, {total_images} images, and {total_tables} tables")
         return doc_structure
     
     def extract_text_with_context(self, file_path: str) -> List[Dict[str, Any]]:
