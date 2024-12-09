@@ -72,11 +72,20 @@ class ChatInterface:
             # Show searching status
             with st.status("🔍 Searching documents...", expanded=True) as status:
                 try:
-                    # Create and run chat graph
+                    # Create and run chat graph with proper configuration
                     graph = create_chat_graph()
-                    result = graph.invoke({
-                        "messages": messages
-                    })
+                    config = {
+                        "configurable": {
+                            "thread_id": st.session_state.chat_id,
+                            "checkpoint_ns": "chat_history",
+                            "checkpoint_id": f"chat_{st.session_state.chat_id}"
+                        }
+                    }
+                    
+                    result = graph.invoke(
+                        {"messages": messages},
+                        config=config
+                    )
                     
                     # Update messages with result
                     if result and "messages" in result:
