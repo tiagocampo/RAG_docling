@@ -5,22 +5,22 @@ from graphs.chat_graph import create_chat_graph
 import asyncio
 import uuid
 import os
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class ChatInterface:
     def __init__(self):
-        # Check for required API keys
-        if not st.session_state.get("openai_api_key"):
-            raise ValueError("OpenAI API key is required for embeddings. Please enter it in the sidebar.")
-        if not st.session_state.get("anthropic_api_key"):
-            raise ValueError("Anthropic API key is required for Claude models. Please enter it in the sidebar.")
-        
-        # Create the graph once when the interface is initialized
-        self.graph = create_chat_graph()
-        
-        # Initialize or get the chat session ID
+        """Initialize chat interface."""
+        # Create unique chat ID if not exists
         if "chat_id" not in st.session_state:
             st.session_state.chat_id = str(uuid.uuid4())
-
+        
+        # Create chat graph
+        self.graph = create_chat_graph()
+    
     def render(self):
         # Initialize chat history and summary
         if "messages" not in st.session_state:
@@ -85,7 +85,9 @@ class ChatInterface:
                         status.update(label="✅ Found relevant information!", state="complete")
                     else:
                         status.update(label="❌ No relevant information found", state="error")
+                        logger.warning("No messages returned from chat graph")
                         
                 except Exception as e:
                     logger.error(f"Error in chat processing: {str(e)}")
                     status.update(label=f"❌ Error: {str(e)}", state="error")
+                    st.error("An error occurred while processing your request. Please try again.")
