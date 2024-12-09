@@ -136,18 +136,22 @@ def main():
             with st.expander("🤖 Model Settings", expanded=True):
                 # Model selection with descriptions
                 model_options = list(AVAILABLE_MODELS.keys())
-                current_model = st.session_state.get("model_name", DEFAULT_MODEL)
                 
+                # Initialize model name in session state if not present
+                if "model_name" not in st.session_state:
+                    st.session_state.model_name = DEFAULT_MODEL
+                
+                # Model selection without default value
                 st.selectbox(
                     "Model",
                     options=model_options,
-                    index=model_options.index(current_model),
+                    index=model_options.index(st.session_state.model_name),
                     key="model_name",
                     help="Select the model for chat interactions"
                 )
                 
                 # Show selected model details
-                selected_model = st.session_state.get("model_name", DEFAULT_MODEL)
+                selected_model = st.session_state.model_name
                 model_config = AVAILABLE_MODELS[selected_model]
                 
                 st.write("**Model Details:**")
