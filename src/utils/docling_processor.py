@@ -204,23 +204,11 @@ class DoclingProcessor:
                 logger.error(f"Failed to encode image to base64: {str(e)}")
                 return f"Error encoding image: {str(e)}"
             
-            # Create messages for the model
+            # Create messages for the model using the correct format for OpenAI's vision API
             messages = [
-                {
-                    "role": "system",
-                    "content": "You are a helpful assistant that analyzes images and provides detailed descriptions."
-                },
                 {
                     "role": "user",
                     "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": "image/jpeg",
-                                "data": base64_image
-                            }
-                        },
                         {
                             "type": "text",
                             "text": """Analyze this image and provide a detailed description of its contents.
@@ -231,6 +219,12 @@ class DoclingProcessor:
                             4. Key information that would be relevant for document understanding
                             
                             Provide the description in a clear, concise format."""
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_image}"
+                            }
                         }
                     ]
                 }
