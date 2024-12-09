@@ -20,6 +20,7 @@ import logging
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.documents import Document
 from typing import List
+from typing import Any
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -74,10 +75,11 @@ DEFAULT_MODEL = "GPT-4o"
 class LoggedRetriever(BaseRetriever):
     """A retriever that logs its operations."""
     
-    def __init__(self, vectorstore):
-        """Initialize with a vectorstore."""
-        self.vectorstore = vectorstore
-        super().__init__()
+    vectorstore: Any = Field(description="The vector store to retrieve from")
+    
+    class Config:
+        """Configuration for this pydantic object."""
+        arbitrary_types_allowed = True
     
     def _get_relevant_documents(self, query: str) -> List[Document]:
         """Get documents relevant to a query with logging."""
@@ -93,7 +95,7 @@ class LoggedRetriever(BaseRetriever):
 def get_retriever_tool():
     """Create the retriever tool with the vectorstore."""
     vectorstore = get_vectorstore()
-    retriever = LoggedRetriever(vectorstore)
+    retriever = LoggedRetriever(vectorstore=vectorstore)
     
     return create_retriever_tool(
         retriever,
