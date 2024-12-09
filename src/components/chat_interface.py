@@ -59,6 +59,8 @@ class ChatInterface:
 
         # Chat input
         if prompt := st.chat_input("Ask about your documents"):
+            logger.info(f"Received user prompt: {prompt}")
+            
             # Display user message
             st.chat_message("user").write(prompt)
             
@@ -82,19 +84,40 @@ class ChatInterface:
                         }
                     }
                     
+                    logger.info("Invoking chat graph...")
                     result = graph.invoke(
                         {"messages": messages},
                         config=config
                     )
+                    logger.info(f"Chat graph result: {result}")
                     
                     # Update messages with result
-                    if result and "messages" in result:
-                        messages.extend(result["messages"])
+                    if result and "messages" in result and result["messages"]:
+                        logger.info(f"Processing {len(result['messages'])} new messages")
+                        for msg in result["messages"]:
+                            logger.info(f"Adding message: {msg.content[:100]}...")  # Log first 100 chars
+                            messages.append(msg)
+                            # Immediately display the new message
+                            if isinstance(msg, AIMessage):
+                                with st.chat_message("assistant"):
+                                    st.write(msg.content)
+                                    if hasattr(msg, 'additional_kwargs') and 'sources' in msg.additional_kwargs:
+                                        with st.expander("🔍 Sources", expanded=False):
+                                            for i, source in enumerate(msg.additional_kwargs['sources']):
+                                                st.markdown(f"""
+                                                **Source {i+1}** (Page {source.get('page', 'N/A')})
+                                                ```
+                                                {source.get('text', 'No text available')}
+                                                ```
+                                                """)
+                        
                         st.session_state.messages = messages
                         status.update(label="✅ Found relevant information!", state="complete")
                     else:
                         status.update(label="❌ No relevant information found", state="error")
-                        logger.warning("No messages returned from chat graph")
+                        logger.warning(f"No messages in result. Result structure: {result}")
+                        with st.chat_message("assistant"):
+                            st.write("I couldn't find relevant information in the documents to answer your question. Could you please rephrase or ask something else?")
                         
                 except Exception as e:
                     logger.error(f"Error in chat processing: {str(e)}")

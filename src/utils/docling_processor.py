@@ -121,6 +121,41 @@ class DoclingProcessor:
             raise Exception(f"Document conversion failed: {conversion_result.error_message}")
         
         doc = conversion_result.document
+        logger.info("Document converted successfully")
+        
+        # Extract metadata
+        metadata = {}
+        try:
+            # Try to get title from document properties
+            if hasattr(doc, 'title'):
+                metadata['title'] = doc.title
+            elif hasattr(doc, 'properties') and hasattr(doc.properties, 'title'):
+                metadata['title'] = doc.properties.title
+            else:
+                # Try to find title in the first page
+                first_page = next(iter(doc.pages.values()), None)
+                if first_page and hasattr(first_page, 'text'):
+                    # Look for potential title in first few lines
+                    lines = first_page.text.split('\n')
+                    if lines:
+                        metadata['title'] = lines[0].strip()
+            
+            # Try to get author
+            if hasattr(doc, 'author'):
+                metadata['author'] = doc.author
+            elif hasattr(doc, 'properties') and hasattr(doc.properties, 'author'):
+                metadata['author'] = doc.properties.author
+            
+            # Try to get date
+            if hasattr(doc, 'date'):
+                metadata['date'] = doc.date
+            elif hasattr(doc, 'properties') and hasattr(doc.properties, 'created'):
+                metadata['date'] = doc.properties.created
+            
+            logger.info(f"Extracted metadata: {metadata}")
+        except Exception as e:
+            logger.warning(f"Error extracting metadata: {str(e)}")
+            metadata = {}
         
         # Process images and tables
         image_analyses = []
@@ -128,20 +163,26 @@ class DoclingProcessor:
         
         # Process page images
         for page in doc.pages.values():
-            if hasattr(page, 'image') and page.image and page.image.pil_image:
+            if hasattr(page, 'image') and page.image:
                 try:
-                    # Convert PIL image to bytes
-                    img_byte_arr = BytesIO()
-                    page.image.pil_image.save(img_byte_arr, format='PNG')
-                    img_byte_arr = img_byte_arr.getvalue()
+                    # Get PIL image, handling both direct PIL images and Docling image objects
+                    pil_image = (page.image.pil_image if hasattr(page.image, 'pil_image') 
+                               else page.image if hasattr(page.image, 'save') 
+                               else None)
                     
-                    # Analyze page image
-                    analysis = self.analyze_image(img_byte_arr)
-                    image_analyses.append({
-                        "analysis": analysis,
-                        "page": page.page_no,
-                        "type": "page_image"
-                    })
+                    if pil_image:
+                        # Convert PIL image to bytes
+                        img_byte_arr = BytesIO()
+                        pil_image.save(img_byte_arr, format='PNG')
+                        img_byte_arr = img_byte_arr.getvalue()
+                        
+                        # Analyze page image
+                        analysis = self.analyze_image(img_byte_arr)
+                        image_analyses.append({
+                            "analysis": analysis,
+                            "page": page.page_no,
+                            "type": "page_image"
+                        })
                 except Exception as e:
                     logger.warning(f"Error processing page image: {str(e)}")
         
@@ -170,24 +211,31 @@ class DoclingProcessor:
                         table_dict["data"].append(row_data)
                     
                     table_data.append(table_dict)
+                    logger.info(f"Found table with {table_dict['rows']} rows and {table_dict['cols']} columns")
                 
                 # Handle figures and other images
                 if hasattr(element, 'get_image'):
                     try:
                         image = element.get_image(doc)
-                        if image and image.pil_image:
-                            # Convert PIL image to bytes
-                            img_byte_arr = BytesIO()
-                            image.pil_image.save(img_byte_arr, format='PNG')
-                            img_byte_arr = img_byte_arr.getvalue()
+                        if image:
+                            # Get PIL image, handling both direct PIL images and Docling image objects
+                            pil_image = (image.pil_image if hasattr(image, 'pil_image') 
+                                       else image if hasattr(image, 'save') 
+                                       else None)
                             
-                            analysis = self.analyze_image(img_byte_arr)
-                            image_analyses.append({
-                                "analysis": analysis,
-                                "page": page_no,
-                                "type": element.__class__.__name__,
-                                "location": element.bbox.to_dict() if hasattr(element.bbox, 'to_dict') else None
-                            })
+                            if pil_image:
+                                # Convert PIL image to bytes
+                                img_byte_arr = BytesIO()
+                                pil_image.save(img_byte_arr, format='PNG')
+                                img_byte_arr = img_byte_arr.getvalue()
+                                
+                                analysis = self.analyze_image(img_byte_arr)
+                                image_analyses.append({
+                                    "analysis": analysis,
+                                    "page": page_no,
+                                    "type": element.__class__.__name__,
+                                    "location": element.bbox.to_dict() if hasattr(element.bbox, 'to_dict') else None
+                                })
                     except Exception as e:
                         logger.warning(f"Error processing element image: {str(e)}")
             
@@ -196,9 +244,11 @@ class DoclingProcessor:
         
         # Export document structure
         doc_dict = doc.export_to_dict()
+        doc_dict["metadata"] = metadata
         doc_dict["images"] = image_analyses
         doc_dict["tables"] = table_data
         
+        logger.info(f"Document processing complete. Found {len(table_data)} tables and {len(image_analyses)} images")
         return doc_dict
     
     def extract_text_with_context(self, file_path: str) -> List[Dict[str, Any]]:

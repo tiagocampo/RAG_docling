@@ -56,10 +56,14 @@ def process_file(file: BinaryIO) -> None:
                 
                 # Get full document info for structure display
                 doc_info = docling_processor.process_document(file_path)
+                logger.info(f"Document info: {doc_info}")  # Log the full document info
+                
+                # Extract metadata with fallbacks
+                metadata = doc_info.get("metadata", {})
                 st.session_state.document_structures[file.name] = {
-                    "title": doc_info.get("metadata", {}).get("title", "N/A"),
-                    "author": doc_info.get("metadata", {}).get("author", "N/A"),
-                    "date": doc_info.get("metadata", {}).get("date", "N/A"),
+                    "title": metadata.get("title", "N/A"),
+                    "author": metadata.get("author", "N/A"),
+                    "date": metadata.get("date", "N/A"),
                     "num_pages": len(doc_info["pages"]),
                     "sections": [
                         {
@@ -81,6 +85,8 @@ def process_file(file: BinaryIO) -> None:
                         for page_num, page in enumerate(doc_info["pages"])
                     ]
                 }
+                
+                logger.info(f"Document structure: {st.session_state.document_structures[file.name]}")
                 
                 # Store in vector database if we have valid texts
                 if texts:
