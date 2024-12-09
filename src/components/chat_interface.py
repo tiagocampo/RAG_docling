@@ -38,7 +38,18 @@ class ChatInterface:
             if isinstance(message, HumanMessage):
                 st.chat_message("user").write(message.content)
             elif isinstance(message, AIMessage):
-                st.chat_message("assistant").write(message.content)
+                with st.chat_message("assistant"):
+                    st.write(message.content)
+                    # If this is a search result message, show the sources
+                    if hasattr(message, 'additional_kwargs') and 'sources' in message.additional_kwargs:
+                        with st.expander("🔍 Sources", expanded=False):
+                            for i, source in enumerate(message.additional_kwargs['sources']):
+                                st.markdown(f"""
+                                **Source {i+1}** (Page {source.get('page', 'N/A')})
+                                ```
+                                {source.get('text', 'No text available')}
+                                ```
+                                """)
 
         # Display current summary in sidebar if available
         if st.session_state.summary:
@@ -57,44 +68,24 @@ class ChatInterface:
             # Create initial state with the new message
             messages = list(st.session_state.messages)
             messages.append(human_message)
-            initial_state = {
-                "messages": messages,
-                "summary": st.session_state.summary,
-                "next": None
-            }
             
-            # Create configuration for checkpointer
-            config = {
-                "configurable": {
-                    "thread_id": st.session_state.chat_id,
-                    "checkpoint_id": f"chat_{st.session_state.chat_id}",
-                    "checkpoint_ns": "chat_history"
-                }
-            }
-            
-            # Display assistant response
-            with st.chat_message("assistant"):
-                message_placeholder = st.empty()
-                
-                # Create event loop for async operations
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                
-                # Process response
-                async def process_response():
-                    # Get response from graph
-                    response = await self.graph.ainvoke(initial_state, config)
-                    return response
-                
-                # Run the async operation
+            # Show searching status
+            with st.status("🔍 Searching documents...", expanded=True) as status:
                 try:
-                    response = loop.run_until_complete(process_response())
-                    # Update messages and summary in session state
-                    if response and "messages" in response:
-                        st.session_state.messages = response["messages"]
-                        st.session_state.summary = response.get("summary")
-                        # Display the last message
-                        last_message = response["messages"][-1]
-                        message_placeholder.markdown(last_message.content)
-                finally:
-                    loop.close() 
+                    # Create and run chat graph
+                    graph = create_chat_graph()
+                    result = graph.invoke({
+                        "messages": messages
+                    })
+                    
+                    # Update messages with result
+                    if result and "messages" in result:
+                        messages.extend(result["messages"])
+                        st.session_state.messages = messages
+                        status.update(label="✅ Found relevant information!", state="complete")
+                    else:
+                        status.update(label="❌ No relevant information found", state="error")
+                        
+                except Exception as e:
+                    logger.error(f"Error in chat processing: {str(e)}")
+                    status.update(label=f"❌ Error: {str(e)}", state="error")

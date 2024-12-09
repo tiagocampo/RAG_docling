@@ -71,8 +71,27 @@ DEFAULT_MODEL = "GPT-4o"
 def get_retriever_tool():
     """Create the retriever tool with the vectorstore."""
     vectorstore = get_vectorstore()
+    retriever = vectorstore.as_retriever(
+        search_kwargs={"k": 3}  # Get top 3 results
+    )
+    
+    # Wrap the retriever's get_relevant_documents method to add logging
+    original_get_relevant_documents = retriever.get_relevant_documents
+    
+    def logged_get_relevant_documents(query: str):
+        logger.info(f"Searching documents with query: {query}")
+        results = original_get_relevant_documents(query)
+        logger.info(f"Found {len(results)} documents")
+        for i, doc in enumerate(results):
+            logger.info(f"Document {i + 1}:")
+            logger.info(f"Content: {doc.page_content[:200]}...")  # First 200 chars
+            logger.info(f"Metadata: {doc.metadata}")
+        return results
+    
+    retriever.get_relevant_documents = logged_get_relevant_documents
+    
     return create_retriever_tool(
-        vectorstore.as_retriever(),
+        retriever,
         "search_documents",
         "Search through the uploaded documents to find relevant information. Use this tool to find context for answering questions."
     )
@@ -204,11 +223,17 @@ def generate(state):
     # Handle different types of tool outputs
     if hasattr(last_message, 'content') and isinstance(last_message.content, (list, tuple)):
         # Handle retriever output (list of documents)
-        docs = [str(doc.page_content) for doc in last_message.content]
-        context = "\n\n".join(docs)
+        docs = last_message.content
+        sources = [{
+            "page": doc.metadata.get("page", "N/A"),
+            "text": doc.page_content,
+            "section": doc.metadata.get("section", "N/A")
+        } for doc in docs]
+        context = "\n\n".join(str(doc.page_content) for doc in docs)
     else:
         # Handle string content
         context = str(last_message.content)
+        sources = []
     
     prompt = PromptTemplate(
         template="""You are a helpful AI assistant answering questions based on the provided documents.
@@ -225,7 +250,12 @@ def generate(state):
     model = get_model()
     chain = prompt | model
     response = chain.invoke({"context": context, "question": question})
-    return {"messages": [AIMessage(content=str(response))]}
+    
+    # Create AIMessage with sources
+    return {"messages": [AIMessage(
+        content=str(response),
+        additional_kwargs={"sources": sources} if sources else {}
+    )]}
 
 def create_chat_graph():
     """Create the chat graph with agentic RAG."""

@@ -15,25 +15,51 @@ st.set_page_config(
 def display_document_structure():
     """Display the structure of processed documents."""
     if "document_structures" in st.session_state and st.session_state.document_structures:
-        st.header("Document Structures")
+        st.header("📑 Document Analysis")
+        
         for filename, structure in st.session_state.document_structures.items():
-            with st.expander(f"📄 {filename}"):
-                st.write("**Title:**", structure.get("title", "N/A"))
-                st.write("**Author:**", structure.get("author", "N/A"))
-                st.write("**Date:**", structure.get("date", "N/A"))
-                st.write("**Pages:**", structure["num_pages"])
-                
-                if structure["sections"]:
-                    st.write("**Sections:**")
-                    for section in structure["sections"]:
-                        st.write(f"- {section['title']} (Page {section['page']})")
-                
+            with st.expander(f"📄 {filename}", expanded=True):
+                # Document metadata in a clean layout
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.metric("Tables", structure["num_tables"])
+                    st.metric("Pages", structure["num_pages"])
                 with col2:
-                    st.metric("Figures", structure["num_figures"])
+                    st.metric("Tables", structure["num_tables"])
                 with col3:
+                    st.metric("Figures", structure["num_figures"])
+                
+                # Document info in a nice container
+                with st.container():
+                    st.markdown("### 📌 Document Information")
+                    st.markdown(f"""
+                    - **Title:** {structure.get("title", "N/A")}
+                    - **Author:** {structure.get("author", "N/A")}
+                    - **Date:** {structure.get("date", "N/A")}
+                    """)
+                
+                # Sections in a collapsible container
+                if structure["sections"]:
+                    with st.container():
+                        st.markdown("### 📚 Document Sections")
+                        for section in structure["sections"]:
+                            st.markdown(f"- **{section['title']}** (Page {section['page']})")
+                
+                # Content preview in a scrollable container
+                if structure.get("content"):
+                    with st.expander("📝 Content Preview", expanded=False):
+                        for page in structure["content"]:
+                            with st.container():
+                                st.markdown(f"#### Page {page['page']}")
+                                st.text_area(
+                                    f"Content - Page {page['page']}",
+                                    value=page['text'],
+                                    height=150,
+                                    key=f"{filename}_page_{page['page']}",
+                                    disabled=True
+                                )
+                
+                # Named entities if available
+                if structure["num_entities"] > 0:
                     st.metric("Named Entities", structure["num_entities"])
 
 def handle_api_key():

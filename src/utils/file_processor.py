@@ -72,14 +72,26 @@ def process_file(file: BinaryIO) -> None:
                     "num_tables": len(doc_info.get("tables", [])),
                     "num_figures": len(doc_info.get("figures", [])),
                     "num_images": len(doc_info.get("images", [])),
-                    "num_entities": len(doc_info.get("entities", []))
+                    "num_entities": len(doc_info.get("entities", [])),
+                    "content": [
+                        {
+                            "page": page_num + 1,
+                            "text": page.get("text", "") if isinstance(page, dict) else getattr(page, "text", "")
+                        }
+                        for page_num, page in enumerate(doc_info["pages"])
+                    ]
                 }
                 
                 # Store in vector database if we have valid texts
                 if texts:
                     vectorstore = get_vectorstore()
+                    logger.info(f"Adding {len(texts)} text chunks to vector store")
+                    logger.info(f"Sample text: {texts[0][:200]}...")  # Log first 200 chars of first chunk
+                    logger.info(f"Sample metadata: {metadatas[0]}")
                     vectorstore.add_texts(texts, metadatas=metadatas)
                     logger.info(f"Successfully processed {file.name} with Docling")
+                else:
+                    logger.warning(f"No valid text chunks extracted from {file.name}")
                 
             except Exception as e:
                 logger.error(f"Error processing {file.name} with Docling: {str(e)}")
