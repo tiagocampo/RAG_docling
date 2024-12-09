@@ -32,7 +32,7 @@ def display_document_structure():
                 with col1:
                     st.metric("Tables", structure["num_tables"])
                 with col2:
-                    st.metric("Charts", structure["num_charts"])
+                    st.metric("Figures", structure["num_figures"])
                 with col3:
                     st.metric("Named Entities", structure["num_entities"])
 
