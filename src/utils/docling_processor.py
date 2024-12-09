@@ -14,7 +14,6 @@ from docling.datamodel.base_models import InputFormat, ConversionStatus
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.pipeline.simple_pipeline import SimplePipeline
 from docling.pipeline.standard_pdf_pipeline import StandardPdfPipeline
-from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
 from graphs.chat_graph import get_model
 import base64
 from io import BytesIO
@@ -29,26 +28,18 @@ class DoclingProcessor:
         # Configure pipeline options for PDF
         pdf_pipeline_options = PdfPipelineOptions()
         
-        # Disable OCR but enable better text extraction
+        # Configure text extraction
         pdf_pipeline_options.do_ocr = False
-        pdf_pipeline_options.extract_text = True
-        pdf_pipeline_options.extract_text_from_images = False
         
-        # Enable better text extraction
-        pdf_pipeline_options.text_extraction_options.extract_text_from_vector = True
-        pdf_pipeline_options.text_extraction_options.extract_text_from_paths = True
-        pdf_pipeline_options.text_extraction_options.merge_close_texts = True
-        pdf_pipeline_options.text_extraction_options.detect_lists = True
-        pdf_pipeline_options.text_extraction_options.detect_titles = True
-        
-        # Enable table structure without cell matching for better performance
+        # Configure table detection and structure
         pdf_pipeline_options.do_table_structure = True
-        pdf_pipeline_options.table_structure_options.do_cell_matching = False
+        pdf_pipeline_options.table_structure_options.do_cell_matching = True
         
-        # Enable image extraction with better settings
+        # Configure image extraction
         pdf_pipeline_options.images_scale = 2.0
         pdf_pipeline_options.generate_page_images = True
         pdf_pipeline_options.generate_picture_images = True
+
         
         # Initialize document converter with format-specific options
         self.converter = DocumentConverter(
@@ -57,13 +48,11 @@ class DoclingProcessor:
                 InputFormat.DOCX,
                 InputFormat.PPTX,
                 InputFormat.HTML,
-                InputFormat.IMAGE,
                 InputFormat.MD
             ],
             format_options={
                 InputFormat.PDF: PdfFormatOption(
                     pipeline_cls=StandardPdfPipeline,
-                    backend=PyPdfiumDocumentBackend,
                     pipeline_options=pdf_pipeline_options
                 ),
                 InputFormat.DOCX: WordFormatOption(
@@ -74,9 +63,6 @@ class DoclingProcessor:
                 ),
                 InputFormat.HTML: HTMLFormatOption(
                     pipeline_cls=SimplePipeline
-                ),
-                InputFormat.IMAGE: ImageFormatOption(
-                    pipeline_cls=StandardPdfPipeline
                 )
             }
         )
