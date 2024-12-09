@@ -63,11 +63,11 @@ def process_file(file: BinaryIO) -> None:
                     "num_pages": len(doc_info["pages"]),
                     "sections": [
                         {
-                            "title": section["title"],
-                            "page": section["page_number"]
+                            "title": section.get("header"),
+                            "page": section.get("page_number")
                         }
-                        for section in doc_info["sections"]
-                        if section.get("title")
+                        for section in doc_info.get("layout", {}).get("sections", [])
+                        if section.get("header")
                     ],
                     "num_tables": len(doc_info.get("tables", [])),
                     "num_figures": len(doc_info.get("figures", [])),

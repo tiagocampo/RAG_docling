@@ -3,7 +3,6 @@
 
 # Docling and dependencies
 docling
-rapidocr-onnxruntime>=1.3.8
 layoutparser>=0.3.4
 
 # LangChain ecosystem
