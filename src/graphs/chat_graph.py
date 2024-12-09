@@ -17,6 +17,9 @@ from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field
 import os
 import logging
+from langchain_core.retrievers import BaseRetriever
+from langchain_core.documents import Document
+from typing import List
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -68,27 +71,29 @@ AVAILABLE_MODELS = {
 # Default model
 DEFAULT_MODEL = "GPT-4o"
 
-def get_retriever_tool():
-    """Create the retriever tool with the vectorstore."""
-    vectorstore = get_vectorstore()
-    retriever = vectorstore.as_retriever(
-        search_kwargs={"k": 3}  # Get top 3 results
-    )
+class LoggedRetriever(BaseRetriever):
+    """A retriever that logs its operations."""
     
-    # Wrap the retriever's get_relevant_documents method to add logging
-    original_get_relevant_documents = retriever.get_relevant_documents
+    def __init__(self, vectorstore):
+        """Initialize with a vectorstore."""
+        self.vectorstore = vectorstore
+        super().__init__()
     
-    def logged_get_relevant_documents(query: str):
+    def _get_relevant_documents(self, query: str) -> List[Document]:
+        """Get documents relevant to a query with logging."""
         logger.info(f"Searching documents with query: {query}")
-        results = original_get_relevant_documents(query)
+        results = self.vectorstore.similarity_search(query, k=3)
         logger.info(f"Found {len(results)} documents")
         for i, doc in enumerate(results):
             logger.info(f"Document {i + 1}:")
             logger.info(f"Content: {doc.page_content[:200]}...")  # First 200 chars
             logger.info(f"Metadata: {doc.metadata}")
         return results
-    
-    retriever.get_relevant_documents = logged_get_relevant_documents
+
+def get_retriever_tool():
+    """Create the retriever tool with the vectorstore."""
+    vectorstore = get_vectorstore()
+    retriever = LoggedRetriever(vectorstore)
     
     return create_retriever_tool(
         retriever,
