@@ -54,14 +54,15 @@ def display_document_structure():
                 st.markdown("---")
                 st.markdown("### 📝 Content Preview")
                 tabs = st.tabs([f"Page {page['page']}" for page in structure["content"]])
-                for tab, page in zip(tabs, structure["content"]):
+                for i, (tab, page) in enumerate(zip(tabs, structure["content"])):
                     with tab:
                         st.text_area(
                             label="Content",
                             value=page['text'],
                             height=200,
                             disabled=True,
-                            label_visibility="collapsed"
+                            label_visibility="collapsed",
+                            key=f"{filename}_page_{page['page']}_{i}"  # Unique key for each text area
                         )
             
             # Named entities if available
