@@ -153,10 +153,8 @@ class DoclingProcessor:
         doc_structure = {
             "metadata": metadata,
             "pages": pages,
-            "tables": [table.export_to_dict() for table in doc.tables],
-            "figures": [fig.export_to_dict() for fig in doc.figures],
-            "images": [img.export_to_dict() for img in doc.images],
-            "entities": doc.entities if hasattr(doc, 'entities') else []
+            "tables": [table.export_to_dict() for table in getattr(doc, 'tables', [])],
+            "images": [img.export_to_dict() for img in getattr(doc, 'images', [])]
         }
         
         logger.info(f"Document processing complete with {len(pages)} pages")
