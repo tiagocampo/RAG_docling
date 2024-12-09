@@ -197,9 +197,26 @@ class DoclingProcessor:
             file_path: Path to the document file
             
         Returns:
-            List of dictionaries containing text chunks with metadata
+            List of dictionaries containing text chunks with metadata and context
         """
         logger.info(f"Extracting text with context from: {file_path}")
+        
+        # Configure pipeline options for document processing
+        pipeline_options = PdfPipelineOptions()
+        pipeline_options.images_scale = 2.0  # Higher resolution for better quality
+        pipeline_options.generate_page_images = True
+        pipeline_options.generate_picture_images = True
+        pipeline_options.do_table_structure = True
+        pipeline_options.do_ocr = True
+        
+        # Update converter configuration
+        self.converter = DocumentConverter(
+            format_options={
+                InputFormat.PDF: PdfFormatOption(
+                    pipeline_options=pipeline_options
+                )
+            }
+        )
         
         # Convert file path to Path object
         path = Path(file_path)
@@ -214,9 +231,12 @@ class DoclingProcessor:
         chunks = []
         # Process multimodal content
         for content_text, content_md, content_dt, page_cells, page_segments, page in generate_multimodal_pages(conversion_result):
-            # Extract metadata
-            metadata = {
-                "page_number": page.page_no,
+            # Create context information
+            context = {
+                "page_num": page.page_no,
+                "document": conversion_result.input.file.name,
+                "document_type": "pdf",
+                "total_pages": len(conversion_result.document.pages),
                 "markdown": content_md,
                 "cells": page_cells,
                 "segments": page_segments
@@ -232,14 +252,18 @@ class DoclingProcessor:
                     
                     # Analyze page content with vision model
                     image_analysis = self.analyze_image(img_byte_arr)
-                    metadata["image_analysis"] = image_analysis
+                    context["image_analysis"] = image_analysis
+                    
+                    # Add image dimensions
+                    context["image_width"] = page.image.width
+                    context["image_height"] = page.image.height
                 except Exception as e:
                     logger.warning(f"Error analyzing page image: {str(e)}")
             
-            # Create chunk with text and metadata
+            # Create chunk with text and context
             chunk = {
                 "text": content_text,
-                "metadata": metadata
+                "context": context
             }
             chunks.append(chunk)
         
