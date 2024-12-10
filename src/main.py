@@ -5,7 +5,7 @@ import streamlit as st
 from components.file_uploader import FileUploader
 from components.chat_interface import ChatInterface
 from utils.session_state import initialize_session_state
-from graphs.chat_graph import AVAILABLE_MODELS, DEFAULT_MODEL
+from models.model_manager import AVAILABLE_MODELS, DEFAULT_MODEL
 import os
 
 st.set_page_config(
