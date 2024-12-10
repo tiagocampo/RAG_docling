@@ -23,24 +23,30 @@ class ChatInterface:
         if not st.session_state.get("processed_files"):
             st.info("👋 Welcome! Please upload some documents using the sidebar before starting the chat.")
             return
-            
-        # Display chat messages
-        for message in st.session_state.messages:
-            if isinstance(message, HumanMessage):
-                with st.chat_message("user"):
-                    st.write(message.content)
-            elif isinstance(message, AIMessage):
-                with st.chat_message("assistant"):
-                    st.write(message.content)
         
-        # Chat input
-        if prompt := st.chat_input("Ask a question about your documents"):
+        # Chat input - Place it at the bottom using columns
+        col1, col2 = st.columns([6, 1])
+        
+        # Display chat messages
+        messages_container = st.container()
+        
+        with messages_container:
+            for message in st.session_state.messages:
+                if isinstance(message, HumanMessage):
+                    with st.chat_message("user"):
+                        st.write(message.content)
+                elif isinstance(message, AIMessage):
+                    with st.chat_message("assistant"):
+                        st.write(message.content)
+        
+        # Chat input at the bottom
+        with col1:
+            prompt = st.chat_input("Ask a question about your documents")
+            
+        if prompt:
             # Add user message
             user_message = HumanMessage(content=prompt)
             st.session_state.messages.append(user_message)
-            
-            with st.chat_message("user"):
-                st.write(prompt)
             
             # Process the question
             with st.chat_message("assistant"):
@@ -53,7 +59,5 @@ class ChatInterface:
                         assistant_message = AIMessage(content=response)
                         st.session_state.messages.append(assistant_message)
                         
-                        st.write(response)
-                    except Exception as e:
-                        error_msg = f"An error occurred: {str(e)}"
-                        st.error(error_msg)
+                        # Rerun to update the display
+                        st.rerun()
