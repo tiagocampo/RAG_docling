@@ -62,31 +62,47 @@ def retrieve_from_vectorstore(state: GraphState) -> Dict[str, Any]:
     logger.info("Retrieving from vectorstore")
     question = state["current_question"]
     
-    # Get documents from vectorstore
-    vectorstore = get_vectorstore()
-    documents = vectorstore.similarity_search(question, k=3)
-    
-    return {
-        **state,
-        "documents": documents
-    }
+    try:
+        # Get documents from vectorstore
+        vectorstore = get_vectorstore()
+        documents = vectorstore.similarity_search(question, k=3)
+        
+        return {
+            **state,  # Include all existing state
+            "documents": documents
+        }
+    except Exception as e:
+        logger.error(f"Error retrieving from vectorstore: {str(e)}")
+        return {
+            **state,
+            "documents": [],
+            "generation": f"Error retrieving documents: {str(e)}"
+        }
 
 def web_search(state: GraphState) -> Dict[str, Any]:
     """Perform web search."""
     logger.info("Performing web search")
     question = state["current_question"]
     
-    # Get web search results
-    results = web_search_service.search(question)
-    
-    # If we also have vectorstore results, combine them
-    if state.get("documents"):
-        results = web_search_service.combine_results(results, state["documents"])
-    
-    return {
-        **state,
-        "documents": results
-    }
+    try:
+        # Get web search results
+        results = web_search_service.search(question)
+        
+        # If we also have vectorstore results, combine them
+        if state.get("documents"):
+            results = web_search_service.combine_results(results, state["documents"])
+        
+        return {
+            **state,  # Include all existing state
+            "documents": results
+        }
+    except Exception as e:
+        logger.error(f"Error in web search: {str(e)}")
+        return {
+            **state,
+            "documents": [],
+            "generation": f"Error performing web search: {str(e)}"
+        }
 
 def grade_documents(state: GraphState) -> str:
     """Grade retrieved documents and decide next step."""
@@ -116,32 +132,39 @@ def rewrite_question(state: GraphState) -> Dict[str, Any]:
     question = state["current_question"]
     failed_retrievals = state["failed_retrievals"]
     
-    # Get rewritten question
-    rewritten = grading_service.suggest_rewrite(question, failed_retrievals)
-    
-    return {
-        **state,
-        "current_question": rewritten
-    }
+    try:
+        # Get rewritten question
+        rewritten = grading_service.suggest_rewrite(question, failed_retrievals)
+        
+        return {
+            **state,  # Include all existing state
+            "current_question": rewritten
+        }
+    except Exception as e:
+        logger.error(f"Error rewriting question: {str(e)}")
+        return {
+            **state,
+            "generation": f"Error rewriting question: {str(e)}"
+        }
 
 def generate_response(state: GraphState) -> Dict[str, Any]:
     """Generate response using retrieved documents."""
-    model = get_model()  # Use existing get_model function
+    model = get_model()
     question = state["current_question"]
     documents = state["documents"]
     
-    # Create system message
-    system_message = SystemMessage(content="""You are a helpful AI assistant that answers questions based on the provided documents.
-    Always cite your sources and be honest if you're not sure about something.
-    If using web search results, mention that the information comes from the web.""")
-    
-    # Create messages
-    messages = [
-        system_message,
-        HumanMessage(content=question)
-    ]
-    
     try:
+        # Create system message
+        system_message = SystemMessage(content="""You are a helpful AI assistant that answers questions based on the provided documents.
+        Always cite your sources and be honest if you're not sure about something.
+        If using web search results, mention that the information comes from the web.""")
+        
+        # Create messages
+        messages = [
+            system_message,
+            HumanMessage(content=question)
+        ]
+        
         # Generate response
         response = model.invoke(messages)
         
@@ -151,11 +174,10 @@ def generate_response(state: GraphState) -> Dict[str, Any]:
             response.content += "\n\n(Information from web search results)"
         
         return {
-            **state,
+            **state,  # Include all existing state
             "generation": response.content,
             "messages": state["messages"] + [AIMessage(content=response.content)]
         }
-        
     except Exception as e:
         logger.error(f"Error generating response: {str(e)}")
         error_msg = "I encountered an error generating a response. Please try again."
