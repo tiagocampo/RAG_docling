@@ -78,7 +78,17 @@ def retrieve_from_vectorstore(state: GraphState) -> Dict[str, Any]:
     try:
         # Get documents from vectorstore
         vectorstore = get_vectorstore()
-        documents = vectorstore.similarity_search(question, k=3)
+        raw_documents = vectorstore.similarity_search(question, k=3)
+        
+        # Convert Document objects to dictionaries
+        documents = [
+            {
+                "content": doc.page_content,
+                "metadata": doc.metadata,
+                "source": "vectorstore"
+            }
+            for doc in raw_documents
+        ]
         
         return {
             **state,  # Include all existing state
@@ -101,13 +111,23 @@ def web_search(state: GraphState) -> Dict[str, Any]:
         # Get web search results
         results = web_search_service.search(question)
         
+        # Convert results to consistent format
+        documents = [
+            {
+                "content": result.get("content", ""),
+                "metadata": {"source": "web_search", **result.get("metadata", {})},
+                "source": "web_search"
+            }
+            for result in results
+        ]
+        
         # If we also have vectorstore results, combine them
         if state.get("documents"):
-            results = web_search_service.combine_results(results, state["documents"])
+            documents.extend(state["documents"])
         
         return {
             **state,  # Include all existing state
-            "documents": results
+            "documents": documents
         }
     except Exception as e:
         logger.error(f"Error in web search: {str(e)}")
@@ -167,10 +187,19 @@ def generate_response(state: GraphState) -> Dict[str, Any]:
     documents = state["documents"]
     
     try:
+        # Create context from documents
+        context = "\n\n".join(
+            f"Document {i+1}:\n{doc['content']}"
+            for i, doc in enumerate(documents)
+        )
+        
         # Create system message
-        system_message = SystemMessage(content="""You are a helpful AI assistant that answers questions based on the provided documents.
+        system_message = SystemMessage(content=f"""You are a helpful AI assistant that answers questions based on the provided documents.
         Always cite your sources and be honest if you're not sure about something.
-        If using web search results, mention that the information comes from the web.""")
+        If using web search results, mention that the information comes from the web.
+        
+        Here are the relevant documents:
+        {context}""")
         
         # Create messages
         messages = [
@@ -182,7 +211,7 @@ def generate_response(state: GraphState) -> Dict[str, Any]:
         response = model.invoke(messages)
         
         # Add source information
-        sources = [doc.get("metadata", {}).get("source", "unknown") for doc in documents]
+        sources = [doc.get("source", "unknown") for doc in documents]
         if "web_search" in sources:
             response.content += "\n\n(Information from web search results)"
         
