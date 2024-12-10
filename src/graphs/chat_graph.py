@@ -160,6 +160,7 @@ def create_chat_graph():
     workflow = StateGraph(GraphState)
     
     # Add nodes
+    workflow.add_node("route_question", route_question)
     workflow.add_node("vectorstore", retrieve_from_vectorstore)
     workflow.add_node("web_search", web_search)
     workflow.add_node("grade_documents", grade_documents)
