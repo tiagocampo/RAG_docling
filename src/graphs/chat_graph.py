@@ -38,6 +38,17 @@ class GraphState(TypedDict):
     failed_retrievals: int
     source: str
 
+def initialize_state(question: str) -> GraphState:
+    """Initialize the graph state with a question."""
+    return {
+        "messages": [],
+        "current_question": question,
+        "documents": [],
+        "generation": "",
+        "failed_retrievals": 0,
+        "source": ""
+    }
+
 def route_question(state: GraphState) -> str:
     """Route the question to appropriate data source."""
     question = state["current_question"]
@@ -197,3 +208,10 @@ def create_chat_graph():
     workflow.add_edge("generate", END)
     
     return workflow.compile(checkpointer=memory)
+
+def process_question(question: str) -> Dict[str, Any]:
+    """Process a question through the graph."""
+    graph = create_chat_graph()
+    initial_state = initialize_state(question)
+    result = graph.invoke(initial_state)
+    return result
