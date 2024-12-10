@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Literal
 from pydantic import BaseModel, Field
 from langchain_core.messages import BaseMessage
-from models.model_factory import ModelFactory
+from graphs.chat_graph import get_model
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ class GradingService:
     """Service for grading document relevance and checking hallucinations."""
     
     def __init__(self):
-        self.model = ModelFactory.create_model()
+        self.model = get_model()
     
     def grade_documents(self, question: str, documents: List[Dict[str, Any]]) -> Grade:
         """
@@ -211,4 +211,4 @@ Provide only the reformulated question without explanation."""
             
         except Exception as e:
             logger.error(f"Error in question rewrite: {str(e)}")
-            return question  # Return original question on error 
+            return question  # Return original question on error

@@ -1,6 +1,6 @@
 from typing import Literal
 from pydantic import BaseModel, Field
-from models.model_factory import ModelFactory
+from graphs.chat_graph import get_model
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ class RoutingService:
     """Service for routing queries to appropriate data sources."""
     
     def __init__(self):
-        self.model = ModelFactory.create_model()
+        self.model = get_model()
     
     def route_question(self, question: str) -> RouteQuery:
         """
@@ -96,4 +96,4 @@ Should we try web search now? Answer only 'yes' or 'no'."""
             
         except Exception as e:
             logger.error(f"Error in web search decision: {str(e)}")
-            return failed_vectorstore_attempts >= 2  # Default fallback after 2 attempts 
+            return failed_vectorstore_attempts >= 2  # Default fallback after 2 attempts
