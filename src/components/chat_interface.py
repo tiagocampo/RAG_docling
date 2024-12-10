@@ -24,59 +24,38 @@ class ChatInterface:
             st.info("👋 Welcome! Please upload some documents using the sidebar before starting the chat.")
             return
         
-        # Chat input - Place it at the bottom using columns
-        col1, col2 = st.columns([6, 1])
-        with col1:
-            # Store the input in session state
-            if "user_input" not in st.session_state:
-                st.session_state.user_input = ""
-            
-            prompt = st.text_input(
-                "Ask a question about your documents",
-                key="chat_input",
-                value=st.session_state.user_input,
-                label_visibility="collapsed"
-            )
+        # Display chat messages from history
+        for message in st.session_state.messages:
+            if isinstance(message, HumanMessage):
+                with st.chat_message("user"):
+                    st.markdown(message.content)
+            elif isinstance(message, AIMessage):
+                with st.chat_message("assistant"):
+                    st.markdown(message.content)
         
-        with col2:
-            send_button = st.button("Send", use_container_width=True)
+        # Accept user input
+        if prompt := st.chat_input("Ask a question about your documents"):
+            # Display user message in chat message container
+            with st.chat_message("user"):
+                st.markdown(prompt)
             
-        # Display chat messages
-        messages_container = st.container()
-        
-        with messages_container:
-            for message in st.session_state.messages:
-                if isinstance(message, HumanMessage):
-                    with st.chat_message("user"):
-                        st.write(message.content)
-                elif isinstance(message, AIMessage):
-                    with st.chat_message("assistant"):
-                        st.write(message.content)
-        
-        # Process the input
-        if send_button and prompt:
-            # Clear the input
-            st.session_state.user_input = ""
-            
-            # Add user message
+            # Add user message to chat history
             user_message = HumanMessage(content=prompt)
             st.session_state.messages.append(user_message)
             
-            # Process the question
+            # Process the question and display assistant response
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
                     try:
                         result = process_question(prompt)
                         response = result["generation"]
                         
-                        # Add assistant message
+                        # Display the response
+                        st.markdown(response)
+                        
+                        # Add assistant message to chat history
                         assistant_message = AIMessage(content=response)
                         st.session_state.messages.append(assistant_message)
-                        
-                        st.write(response)
                     except Exception as e:
                         error_msg = f"An error occurred: {str(e)}"
                         st.error(error_msg)
-            
-            # Rerun to update the interface
-            st.rerun()
