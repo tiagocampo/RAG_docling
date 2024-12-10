@@ -1,6 +1,6 @@
 from typing import Literal
 from pydantic import BaseModel, Field
-from graphs.chat_graph import get_model
+from models.model_manager import get_model
 import logging
 
 logger = logging.getLogger(__name__)
