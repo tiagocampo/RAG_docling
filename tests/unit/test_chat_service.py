@@ -1,8 +1,8 @@
 import pytest
 from unittest.mock import Mock, patch
 from langchain_core.messages import HumanMessage, AIMessage
-from src.services.chat_node_service import ChatNodeService
-from src.services.document_service import DocumentService
+from services.chat_node_service import ChatNodeService
+from services.document_service import DocumentService
 
 @pytest.fixture
 def mock_model():
@@ -12,7 +12,7 @@ def mock_model():
 
 @pytest.fixture
 def chat_service():
-    with patch('src.services.chat_node_service.ModelFactory') as mock_factory:
+    with patch('services.chat_node_service.ModelFactory') as mock_factory:
         mock_factory.create_model.return_value = mock_model()
         service = ChatNodeService()
         yield service

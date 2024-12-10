@@ -8,11 +8,11 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field
 
-from src.models.model_factory import ModelFactory
-from src.models.retriever import create_retriever_tool
-from src.models.vectorstore import get_vectorstore
-from src.services.chat_node_service import ChatNodeService
-from src.config.prompt_config import GRADER_PROMPT
+from models.model_factory import ModelFactory
+from models.retriever import create_retriever_tool
+from models.vectorstore import get_vectorstore
+from services.chat_node_service import ChatNodeService
+from config.prompt_config import GRADER_PROMPT
 
 logger = logging.getLogger(__name__)
 memory = MemorySaver()

@@ -1,10 +1,10 @@
 from typing import Dict, List
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, BaseMessage
-from src.config.prompt_config import SYSTEM_PROMPT, REWRITE_PROMPT
-from src.models.model_factory import ModelFactory
-from src.models.retriever import create_retriever_tool
-from src.models.vectorstore import get_vectorstore
-from src.services.document_service import DocumentService
+from config.prompt_config import SYSTEM_PROMPT, REWRITE_PROMPT
+from models.model_factory import ModelFactory
+from models.retriever import create_retriever_tool
+from models.vectorstore import get_vectorstore
+from services.document_service import DocumentService
 import logging
 
 logger = logging.getLogger(__name__)
