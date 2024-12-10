@@ -49,13 +49,26 @@ def initialize_state(question: str) -> GraphState:
         "source": ""
     }
 
-def route_question(state: GraphState) -> str:
+def route_question(state: GraphState) -> Dict[str, Any]:
     """Route the question to appropriate data source."""
     question = state["current_question"]
-    route = routing_service.route_question(question)
-    state["source"] = route.datasource
-    logger.info(f"Routing question to: {route.datasource} ({route.explanation})")
-    return route.datasource
+    try:
+        route = routing_service.route_question(question)
+        logger.info(f"Routing question to: {route.datasource} ({route.explanation})")
+        
+        return {
+            **state,
+            "source": route.datasource,
+            "next": route.datasource  # Add next step for the graph
+        }
+    except Exception as e:
+        logger.error(f"Error in routing: {str(e)}")
+        return {
+            **state,
+            "source": "vectorstore",  # Default to vectorstore on error
+            "next": "vectorstore",
+            "generation": f"Error in routing: {str(e)}"
+        }
 
 def retrieve_from_vectorstore(state: GraphState) -> Dict[str, Any]:
     """Retrieve documents from vectorstore."""
@@ -206,7 +219,7 @@ def create_chat_graph():
     # Add conditional edges
     workflow.add_conditional_edges(
         "route_question",
-        route_question,
+        lambda x: x["next"],  # Use the next field from state
         {
             "vectorstore": "vectorstore",
             "web_search": "web_search"
