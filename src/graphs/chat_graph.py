@@ -1,9 +1,7 @@
 import streamlit as st
-from typing import Annotated, Sequence, Literal
+from typing import Annotated, Sequence, Literal, Dict, Any, List
 from typing_extensions import TypedDict
-from langchain_core.messages import (
-    SystemMessage, HumanMessage, AIMessage, BaseMessage
-)
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, BaseMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, PromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
@@ -11,16 +9,15 @@ from models.vectorstore import get_vectorstore
 from langchain.tools import Tool
 from langchain.tools.retriever import create_retriever_tool
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import MessagesState, StateGraph, START, END
-from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.graph import StateGraph, END
+from langgraph.prebuilt import ToolNode
 from langgraph.graph.message import add_messages
-from pydantic import BaseModel, Field
 import os
 import logging
-from langchain_core.retrievers import BaseRetriever
-from langchain_core.documents import Document
-from typing import List
-from typing import Any
+
+from services.grading_service import GradingService
+from services.routing_service import RoutingService
+from services.web_search_service import WebSearchService
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -28,10 +25,6 @@ logger = logging.getLogger(__name__)
 
 # Initialize memory saver
 memory = MemorySaver()
-
-# Define the state type
-class AgentState(TypedDict):
-    messages: Annotated[Sequence[BaseMessage], add_messages]
 
 # Define available models and their configurations
 AVAILABLE_MODELS = {
@@ -72,37 +65,6 @@ AVAILABLE_MODELS = {
 # Default model
 DEFAULT_MODEL = "GPT-4o"
 
-class LoggedRetriever(BaseRetriever):
-    """A retriever that logs its operations."""
-    
-    vectorstore: Any = Field(description="The vector store to retrieve from")
-    
-    class Config:
-        """Configuration for this pydantic object."""
-        arbitrary_types_allowed = True
-    
-    def _get_relevant_documents(self, query: str) -> List[Document]:
-        """Get documents relevant to a query with logging."""
-        logger.info(f"Searching documents with query: {query}")
-        results = self.vectorstore.similarity_search(query, k=3)
-        logger.info(f"Found {len(results)} documents")
-        for i, doc in enumerate(results):
-            logger.info(f"Document {i + 1}:")
-            logger.info(f"Content: {doc.page_content[:200]}...")  # First 200 chars
-            logger.info(f"Metadata: {doc.metadata}")
-        return results
-
-def get_retriever_tool():
-    """Create the retriever tool with the vectorstore."""
-    vectorstore = get_vectorstore()
-    retriever = LoggedRetriever(vectorstore=vectorstore)
-    
-    return create_retriever_tool(
-        retriever,
-        "search_documents",
-        "Search through the uploaded documents to find relevant information. Use this tool to find context for answering questions."
-    )
-
 def get_model():
     """Get the model based on configuration."""
     selected_model = st.session_state.get("model_name", DEFAULT_MODEL)
@@ -124,179 +86,175 @@ def get_model():
             streaming=model_config["streaming"]
         )
 
-def grade_documents(state) -> Literal["generate", "rewrite"]:
-    """Grade the relevance of retrieved documents."""
-    logger.info("Grading document relevance")
-    
-    class Grade(BaseModel):
-        """Binary score for relevance check."""
-        binary_score: str = Field(description="Relevance score 'yes' or 'no'")
-    
-    model = get_model()
-    llm_with_tool = model.with_structured_output(Grade)
-    
-    prompt = PromptTemplate(
-        template="""You are a grader assessing relevance of retrieved documents to a user question.
-        
-        Here is the retrieved document:
-        {context}
-        
-        Here is the user question:
-        {question}
-        
-        If the document contains keywords or semantic meaning related to the user question, grade it as relevant.
-        Give a binary score 'yes' or 'no' to indicate whether the document is relevant to the question.""",
-        input_variables=["context", "question"]
-    )
-    
-    chain = prompt | llm_with_tool
-    
-    messages = state["messages"]
-    question = messages[0].content
-    last_message = messages[-1]
-    docs = last_message.content
-    
-    scored_result = chain.invoke({"question": question, "context": docs})
-    score = scored_result.binary_score
-    
-    logger.info(f"Document relevance score: {score}")
-    return "generate" if score == "yes" else "rewrite"
+# Initialize services
+grading_service = GradingService()
+routing_service = RoutingService()
+web_search_service = WebSearchService()
 
-def agent(state):
-    """Process the conversation using the agent."""
-    logger.info("Calling agent")
-    messages = state["messages"]
-    model = get_model()
-    tools = [get_retriever_tool()]
-    
-    # Create a proper system message
-    system_message = SystemMessage(content="""You are a helpful AI assistant that answers questions based on documents.
-    You have access to a search tool that can find relevant information in the documents.
-    
-    ALWAYS follow these rules:
-    1. ALWAYS use the search_documents tool first to find relevant information
-    2. Use the information from the search results to answer questions
-    3. If the search doesn't return useful results, try rephrasing the search
-    4. Be honest if you can't find relevant information
-    5. Cite specific sections from the documents in your answers
-    
-    When using the search tool:
-    1. Start with a focused search query
-    2. If needed, do multiple searches with different queries
-    3. Combine information from multiple searches if necessary""")
-    
-    # Add system message to the conversation
-    full_messages = [system_message] + messages
-    
-    # Bind tools to the model
-    model_with_tools = model.bind_tools(tools)
-    
-    # Process with proper tool handling
-    try:
-        response = model_with_tools.invoke(full_messages)
-        return {"messages": [response]}
-    except Exception as e:
-        logger.error(f"Error in agent processing: {str(e)}")
-        return {"messages": [AIMessage(content="I encountered an error while processing your request. Please try again.")]}
+class GraphState(TypedDict):
+    """State maintained between steps."""
+    messages: Annotated[Sequence[BaseMessage], add_messages]
+    current_question: str
+    documents: List[Dict[str, Any]]
+    generation: str
+    failed_retrievals: int
+    source: str
 
-def rewrite(state):
-    """Rewrite the query for better retrieval."""
-    logger.info("Rewriting query")
-    messages = state["messages"]
-    question = messages[0].content
+def route_question(state: GraphState) -> str:
+    """Route the question to appropriate data source."""
+    question = state["current_question"]
+    route = routing_service.route_question(question)
+    state["source"] = route.datasource
+    logger.info(f"Routing question to: {route.datasource} ({route.explanation})")
+    return route.datasource
+
+def retrieve_from_vectorstore(state: GraphState) -> Dict[str, Any]:
+    """Retrieve documents from vectorstore."""
+    logger.info("Retrieving from vectorstore")
+    question = state["current_question"]
     
-    msg = [
-        HumanMessage(
-            content=f"""Look at the input and try to reason about the underlying semantic intent/meaning.
-            
-            Here is the initial question:
-            {question}
-            
-            Formulate an improved question that will help find more relevant information:"""
-        )
+    # Get documents from vectorstore
+    vectorstore = get_vectorstore()
+    documents = vectorstore.similarity_search(question, k=3)
+    
+    return {
+        **state,
+        "documents": documents
+    }
+
+def web_search(state: GraphState) -> Dict[str, Any]:
+    """Perform web search."""
+    logger.info("Performing web search")
+    question = state["current_question"]
+    
+    # Get web search results
+    results = web_search_service.search(question)
+    
+    # If we also have vectorstore results, combine them
+    if state.get("documents"):
+        results = web_search_service.combine_results(results, state["documents"])
+    
+    return {
+        **state,
+        "documents": results
+    }
+
+def grade_documents(state: GraphState) -> str:
+    """Grade retrieved documents and decide next step."""
+    documents = state["documents"]
+    question = state["current_question"]
+    
+    # Grade documents
+    grade = grading_service.grade_documents(question, documents)
+    logger.info(f"Document relevance: {grade}")
+    
+    if grade.binary_score == "yes":
+        return "generate"
+    
+    # Increment failed retrievals
+    state["failed_retrievals"] = state.get("failed_retrievals", 0) + 1
+    
+    # Check if we should try web search
+    if state["source"] == "vectorstore" and routing_service.should_use_web_search(
+        question, state["failed_retrievals"]
+    ):
+        return "web_search"
+    
+    return "rewrite"
+
+def rewrite_question(state: GraphState) -> Dict[str, Any]:
+    """Rewrite the question for better retrieval."""
+    question = state["current_question"]
+    failed_retrievals = state["failed_retrievals"]
+    
+    # Get rewritten question
+    rewritten = grading_service.suggest_rewrite(question, failed_retrievals)
+    
+    return {
+        **state,
+        "current_question": rewritten
+    }
+
+def generate_response(state: GraphState) -> Dict[str, Any]:
+    """Generate response using retrieved documents."""
+    model = get_model()  # Use existing get_model function
+    question = state["current_question"]
+    documents = state["documents"]
+    
+    # Create system message
+    system_message = SystemMessage(content="""You are a helpful AI assistant that answers questions based on the provided documents.
+    Always cite your sources and be honest if you're not sure about something.
+    If using web search results, mention that the information comes from the web.""")
+    
+    # Create messages
+    messages = [
+        system_message,
+        HumanMessage(content=question)
     ]
     
-    model = get_model()
-    response = model.invoke(msg)
-    return {"messages": [response]}
-
-def generate(state):
-    """Generate the final answer."""
-    logger.info("Generating answer")
-    messages = state["messages"]
-    question = messages[0].content
-    last_message = messages[-1]
-    
-    # Handle different types of tool outputs
-    if hasattr(last_message, 'content') and isinstance(last_message.content, (list, tuple)):
-        # Handle retriever output (list of documents)
-        docs = last_message.content
-        sources = [{
-            "page": doc.metadata.get("page", "N/A"),
-            "text": doc.page_content,
-            "section": doc.metadata.get("section", "N/A")
-        } for doc in docs]
-        context = "\n\n".join(str(doc.page_content) for doc in docs)
-    else:
-        # Handle string content
-        context = str(last_message.content)
-        sources = []
-    
-    prompt = PromptTemplate(
-        template="""You are a helpful AI assistant answering questions based on the provided documents.
-        Use the following context to answer the question. If you don't know the answer, just say that.
-        Use three sentences maximum and keep the answer concise.
+    try:
+        # Generate response
+        response = model.invoke(messages)
         
-        Question: {question}
-        Context: {context}
+        # Add source information
+        sources = [doc.get("metadata", {}).get("source", "unknown") for doc in documents]
+        if "web_search" in sources:
+            response.content += "\n\n(Information from web search results)"
         
-        Answer:""",
-        input_variables=["context", "question"]
-    )
-    
-    model = get_model()
-    chain = prompt | model
-    response = chain.invoke({"context": context, "question": question})
-    
-    # Create AIMessage with sources
-    return {"messages": [AIMessage(
-        content=str(response),
-        additional_kwargs={"sources": sources} if sources else {}
-    )]}
+        return {
+            **state,
+            "generation": response.content,
+            "messages": state["messages"] + [AIMessage(content=response.content)]
+        }
+        
+    except Exception as e:
+        logger.error(f"Error generating response: {str(e)}")
+        error_msg = "I encountered an error generating a response. Please try again."
+        return {
+            **state,
+            "generation": error_msg,
+            "messages": state["messages"] + [AIMessage(content=error_msg)]
+        }
 
 def create_chat_graph():
-    """Create the chat graph with agentic RAG."""
-    # Create the graph
-    workflow = StateGraph(AgentState)
+    """Create the chat graph with adaptive RAG."""
+    # Initialize graph
+    workflow = StateGraph(GraphState)
     
     # Add nodes
-    workflow.add_node("agent", agent)
-    retrieve = ToolNode([get_retriever_tool()])
-    workflow.add_node("retrieve", retrieve)
-    workflow.add_node("rewrite", rewrite)
-    workflow.add_node("generate", generate)
+    workflow.add_node("vectorstore", retrieve_from_vectorstore)
+    workflow.add_node("web_search", web_search)
+    workflow.add_node("grade_documents", grade_documents)
+    workflow.add_node("rewrite", rewrite_question)
+    workflow.add_node("generate", generate_response)
     
     # Add edges
-    workflow.add_edge(START, "agent")
+    workflow.set_entry_point("route_question")
     
-    # Add conditional edges for tool use
+    # Add conditional edges
     workflow.add_conditional_edges(
-        "agent",
-        tools_condition,
+        "route_question",
+        route_question,
         {
-            "tools": "retrieve",
-            END: END
+            "vectorstore": "vectorstore",
+            "web_search": "web_search"
         }
     )
     
-    # Add conditional edges for document relevance
+    workflow.add_edge("vectorstore", "grade_documents")
+    workflow.add_edge("web_search", "grade_documents")
+    
     workflow.add_conditional_edges(
-        "retrieve",
-        grade_documents
+        "grade_documents",
+        grade_documents,
+        {
+            "generate": "generate",
+            "rewrite": "rewrite",
+            "web_search": "web_search"
+        }
     )
     
+    workflow.add_edge("rewrite", "vectorstore")
     workflow.add_edge("generate", END)
-    workflow.add_edge("rewrite", "agent")
     
-    # Compile the graph
     return workflow.compile(checkpointer=memory) 
