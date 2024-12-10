@@ -215,31 +215,59 @@ class DoclingProcessor:
                 logger.error(f"Failed to encode image to base64: {str(e)}")
                 return f"Error encoding image: {str(e)}"
             
-            # Create messages for the model using the correct format for OpenAI's vision API
-            messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": """Analyze this image and provide a detailed description of its contents.
-                            Focus on:
-                            1. Main elements and their relationships
-                            2. Any text visible in the image
-                            3. Charts, diagrams, or visual data
-                            4. Key information that would be relevant for document understanding
-                            
-                            Provide the description in a clear, concise format."""
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}"
+            # Detect model type (OpenAI vs Anthropic)
+            is_anthropic = "anthropic" in str(type(self.model)).lower()
+            logger.info(f"Using {'Anthropic' if is_anthropic else 'OpenAI'} model")
+            
+            # Create prompt text
+            prompt_text = """Analyze this image and provide a detailed description of its contents.
+            Focus on:
+            1. Main elements and their relationships
+            2. Any text visible in the image
+            3. Charts, diagrams, or visual data
+            4. Key information that would be relevant for document understanding
+            
+            Provide the description in a clear, concise format."""
+            
+            # Format messages according to the model type
+            if is_anthropic:
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": prompt_text
+                            },
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": base64_image
+                                }
                             }
-                        }
-                    ]
-                }
-            ]
+                        ]
+                    }
+                ]
+            else:  # OpenAI
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": prompt_text
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{base64_image}"
+                                }
+                            }
+                        ]
+                    }
+                ]
             
             logger.info("Sending image to vision model for analysis")
             
