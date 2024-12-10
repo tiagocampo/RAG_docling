@@ -2,7 +2,7 @@ import streamlit as st
 from components.file_uploader import FileUploader
 from components.chat_interface import ChatInterface
 from utils.session_state import initialize_session_state
-from graphs.chat_graph import AVAILABLE_MODELS, DEFAULT_MODEL
+from config.model_config import AVAILABLE_MODELS, DEFAULT_MODEL
 import os
 
 st.set_page_config(
@@ -137,61 +137,26 @@ def main():
     # Handle API key
     handle_api_key()
     
-    # Only show the rest of the UI if API key is set
-    if st.session_state.get("anthropic_api_key"):
-        # Sidebar for file upload and settings
-        with st.sidebar:
-            st.header("Document Upload")
-            
-            FileUploader().render()
-            
-            # Model settings
-            with st.expander("🤖 Model Settings", expanded=True):
-                # Model selection with descriptions
-                model_options = list(AVAILABLE_MODELS.keys())
-                
-                # Initialize model name in session state if not present
-                if "model_name" not in st.session_state:
-                    st.session_state.model_name = DEFAULT_MODEL
-                
-                # Model selection without default value
-                st.selectbox(
-                    "Model",
-                    options=model_options,
-                    index=model_options.index(st.session_state.model_name),
-                    key="model_name",
-                    help="Select the model for chat interactions"
-                )
-                
-                # Show selected model details
-                selected_model = st.session_state.model_name
-                model_config = AVAILABLE_MODELS[selected_model]
-                
-                st.write("**Model Details:**")
-                st.write(f"- **Provider:** {model_config['provider'].title()}")
-                st.write(f"- **Description:** {model_config['description']}")
-                st.write(f"- **Temperature:** {model_config['temperature']}")
-                st.write(f"- **Max Tokens:** {model_config['max_tokens']}")
-                
-                # Show API key status
-                if model_config["provider"] == "openai":
-                    key_status = "✅" if st.session_state.get("openai_api_key") else "❌"
-                    st.write(f"- **OpenAI API Key:** {key_status}")
-                else:
-                    key_status = "✅" if st.session_state.get("anthropic_api_key") else "❌"
-                    st.write(f"- **Anthropic API Key:** {key_status}")
-        
-        # Main layout with two columns
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            ChatInterface().render()
-        
-        with col2:
-            # Document structure display
-            display_document_structure()
-    else:
-        st.info("Please enter your Anthropic API key in the sidebar to start using the application.")
+    # Initialize session state for model selection if not exists
+    if "model_name" not in st.session_state:
+        st.session_state.model_name = DEFAULT_MODEL
+    
+    # Model selector in sidebar
+    with st.sidebar:
+        st.selectbox(
+            "Select AI Model",
+            options=list(AVAILABLE_MODELS.keys()),
+            key="model_name",
+            help="Choose the AI model to use for chat"
+        )
+    
+    # Initialize components
+    file_uploader = FileUploader()
+    chat_interface = ChatInterface()
+    
+    # Render components
+    file_uploader.render()
+    chat_interface.render()
 
 if __name__ == "__main__":
     main() 

@@ -2,7 +2,7 @@ import streamlit as st
 import os
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
-from config.model_config import AVAILABLE_MODELS, DEFAULT_MODEL
+from src.config.model_config import AVAILABLE_MODELS, DEFAULT_MODEL
 
 class ModelFactory:
     @staticmethod
