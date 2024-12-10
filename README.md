@@ -1,88 +1,119 @@
-# Chat with Your Documents
+# 📚 Chat with Your Documents - Adaptive RAG System
 
-A powerful document chat application built with Streamlit, LangChain, and LangGraph that allows you to have conversations with your documents using advanced AI models.
+> **Project Note**: This project was primarily developed using AI (Cursor AI) with minimal human code intervention. It was created as a self-imposed challenge to evaluate the current capabilities of AI coding assistants. While the AI was able to generate most of the functionality, success required prior technical knowledge to guide the model and fix simple bugs introduced by hallucinations. This experiment demonstrates both the potential and current limitations of AI-assisted development.
 
-## Features
+An advanced document interaction system built with Streamlit and LangChain, featuring adaptive RAG (Retrieval-Augmented Generation) capabilities for intelligent document processing and question answering.
 
-- 📄 Support for multiple file formats (PDF, DOCX, PPTX, PNG, JPG, HTML, MD)
-- 🖼️ Advanced document processing with Docling
-- 🔍 Intelligent document structure extraction (sections, tables, figures)
-- 🤖 Multiple AI model support (OpenAI and Anthropic)
-- 💾 Efficient document storage using Qdrant vector database
-- 📊 Rich document metadata and context preservation
-- 🎯 Modular and testable architecture
+## 🌟 Features
 
-## Prerequisites
+### Adaptive RAG Capabilities
+- **Smart Source Selection**: Automatically routes queries between vectorstore and web search based on question type
+- **Document Relevance Grading**: Evaluates retrieved documents for relevance and quality
+- **Query Rewriting**: Automatically reformulates questions when initial retrievals are insufficient
+- **Multi-Source Integration**: Combines results from local documents and web searches when needed
 
+### User Interface
+- **Modern Chat Interface**: Clean, intuitive chat interface for natural interactions
+- **Document Management**: Easy document upload and processing in the sidebar
+- **Real-time Feedback**: Shows processing status and source information
+- **Session Management**: Maintains chat history and document context
+
+### Model Support
+- **Multiple LLM Options**:
+  - Claude 3.5 Sonnet: Best for complex tasks and deep analysis
+  - Claude 3.5 Haiku: Fast responses while maintaining quality
+  - GPT-4o: Advanced capabilities with multimodal support
+  - GPT-4o Mini: Affordable and intelligent option
+
+## 🚀 Getting Started
+
+### Prerequisites
 - Python 3.9+
-- OpenAI API key (for embeddings)
-- Anthropic API key (for chat model)
-- Docling (for document processing)
+- OpenAI API key (for embeddings and chat)
+- Anthropic API key (optional, for Claude models)
+- Tavily API key (for web search capabilities)
 
-## Installation
+### Installation
 
-1. Clone the repository
-2. Install dependencies:
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/RAG_docling.git
+cd RAG_docling
+```
+
+2. Create and activate a virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Set up environment variables:
+4. Set up environment variables:
 ```bash
-export OPENAI_API_KEY=your_openai_api_key_here
-export ANTHROPIC_API_KEY=your_anthropic_api_key_here
+# Create .env file
+touch .env
+
+# Add your API keys
+echo "OPENAI_API_KEY=your-openai-key" >> .env
+echo "ANTHROPIC_API_KEY=your-anthropic-key" >> .env
+echo "TAVILY_API_KEY=your-tavily-key" >> .env
 ```
 
-Alternatively, you can input your API keys through the application's UI.
+You can get your API keys from:
+- OpenAI: https://platform.openai.com/api-keys
+- Anthropic: https://console.anthropic.com/
+- Tavily: https://tavily.com/
 
-## Usage
+### Running the App
 
-1. Start the application:
 ```bash
 streamlit run src/main.py
 ```
 
-2. Configure your API keys in the sidebar if not set through environment variables
-3. Upload your documents through the sidebar
-4. View detailed document structure analysis
-5. Start chatting with your documents!
+## 🔧 Configuration
 
-## Features in Detail
+### Model Configuration
+- Models can be configured in `src/models/model_manager.py`
+- Default settings optimize for accuracy while maintaining reasonable response times
+- Temperature and other parameters can be adjusted for different use cases
 
 ### Document Processing
-- Automatic section detection and hierarchical structure extraction
-- Table and figure detection
-- Image analysis and description
-- Rich metadata extraction (title, author, date)
+- Supports multiple document formats (PDF, TXT, DOCX)
+- Configurable chunk size and overlap for document splitting
+- Vector store settings can be adjusted in `src/models/vectorstore.py`
 
-### Vector Storage
-- Efficient chunking with context preservation
-- Metadata-rich storage including:
-  - Page numbers
-  - Section information
-  - Table and figure presence
-  - Image descriptions
+## 🛠️ Architecture
 
-### Chat Interface
-- Multiple AI model support
-- Configurable model parameters
-- Context-aware responses
-- Document structure awareness
+### Core Components
+- **Graph-based Processing**: Uses LangGraph for flexible query processing flow
+- **Adaptive Routing**: Smart decision-making for source selection
+- **Document Grading**: Quality assessment of retrieved information
+- **Query Refinement**: Automatic question reformulation
+- **Web Search**: Tavily integration for real-time information
 
-## Development
+### Data Flow
+1. User uploads documents → processed into vector store
+2. User asks question → routed to appropriate source (vectorstore or web search)
+3. Documents retrieved → graded for relevance
+4. If needed → question rewritten or additional sources consulted
+5. Final answer generated → presented to user
 
-### Project Structure
-- `src/`
-  - `components/`: UI components and interfaces
-  - `utils/`: Document processing and helper functions
-  - `models/`: Vector store and model configurations
-  - `graphs/`: Chat flow management
+## 📝 License
 
-### Running Tests
-```bash
-pytest tests/
-```
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## License
+## 🤝 Contributing
 
-MIT 
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## 🙏 Acknowledgments
+
+- Built with [Streamlit](https://streamlit.io/)
+- Powered by [LangChain](https://python.langchain.com/)
+- Uses [LangGraph](https://python.langchain.com/docs/langgraph) for flow control
+- Vector storage by [Qdrant](https://qdrant.tech/)
+- Web search by [Tavily](https://tavily.com/) 
