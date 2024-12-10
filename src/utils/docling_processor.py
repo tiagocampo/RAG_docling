@@ -83,7 +83,20 @@ class DoclingProcessor:
         doc = conversion_result.document
         logger.info("Document converted successfully")
         
-        # Process multimodal content
+        # Modularize the processing of multimodal content
+        pages, total_images = self._process_multimodal_content(conversion_result)
+        
+        # Modularize the extraction of metadata
+        metadata = self._extract_metadata(doc)
+        
+        # Modularize the preparation of the final document structure
+        doc_structure = self._prepare_document_structure(metadata, pages, total_images)
+        
+        logger.info(f"Document processing complete with {len(pages)} pages, {total_images} images")
+        return doc_structure
+    
+    def _process_multimodal_content(self, conversion_result: ConversionResult) -> Tuple[List[Dict[str, Any]], int]:
+        """Process multimodal content from the conversion result."""
         pages = []
         total_images = 0  # Counter for total images
         
@@ -123,7 +136,10 @@ class DoclingProcessor:
             
             pages.append(page_info)
         
-        # Extract metadata
+        return pages, total_images
+    
+    def _extract_metadata(self, doc: Document) -> Dict[str, Any]:
+        """Extract metadata from the document."""
         metadata = {}
         try:
             # Try to get title from document properties
@@ -156,6 +172,10 @@ class DoclingProcessor:
             logger.warning(f"Error extracting metadata: {str(e)}")
             metadata = {}
         
+        return metadata
+    
+    def _prepare_document_structure(self, metadata: Dict[str, Any], pages: List[Dict[str, Any]], total_images: int) -> Dict[str, Any]:
+        """Prepare the final document structure."""
         # Count tables from page_cells
         total_tables = sum(1 for page in pages if page["tables"])
         
@@ -194,25 +214,75 @@ class DoclingProcessor:
         
         return chunks
     
+    def _validate_image_data(self, image_data: bytes) -> bool:
+        """Validate image data."""
+        if not image_data:
+            logger.error("Empty image data received")
+            return False
+        return True
+
+    def _encode_image_to_base64(self, image_data: bytes) -> str:
+        """Encode image data to base64."""
+        try:
+            base64_image = base64.b64encode(image_data).decode('utf-8')
+            logger.debug(f"Successfully encoded image to base64 (length: {len(base64_image)})")
+            return base64_image
+        except Exception as e:
+            logger.error(f"Failed to encode image to base64: {str(e)}")
+            return ""
+
+    def _create_messages_for_model(self, base64_image: str) -> List[Dict[str, Any]]:
+        """Create messages for the model using the correct format for OpenAI's vision API."""
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": """Analyze this image and provide a detailed description of its contents.
+                        Focus on:
+                        1. Main elements and their relationships
+                        2. Any text visible in the image
+                        3. Charts, diagrams, or visual data
+                        4. Key information that would be relevant for document understanding
+                                                        
+                        Provide the description in a clear, concise format."""
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{base64_image}"
+                        }
+                    }
+                ]
+            }
+        ]
+        return messages
+
+    def _analyze_image_with_model(self, messages: List[Dict[str, Any]]) -> str:
+        """Analyze image using LLM with vision capabilities."""
+        try:
+            response = self.model.invoke(messages)
+            logger.info("Successfully received response from vision model")
+            return response.content
+        except Exception as e:
+            logger.error(f"Error during model invocation: {str(e)}", exc_info=True)
+            return f"Error analyzing image with model: {str(e)}"
+
     def analyze_image(self, image_data: bytes) -> str:
         """Analyze image using LLM with vision capabilities."""
         try:
             logger.info("Starting image analysis")
             
-            # Validate image data
-            if not image_data:
-                logger.error("Empty image data received")
+            if not self._validate_image_data(image_data):
                 return "Error: No image data provided"
             
-            logger.debug(f"Image data size: {len(image_data)} bytes")
+            base64_image = self._encode_image_to_base64(image_data)
+            if not base64_image:
+                return "Error encoding image to base64"
             
-            try:
-                # Convert image to base64
-                base64_image = base64.b64encode(image_data).decode('utf-8')
-                logger.debug(f"Successfully encoded image to base64 (length: {len(base64_image)})")
-            except Exception as e:
-                logger.error(f"Failed to encode image to base64: {str(e)}")
-                return f"Error encoding image: {str(e)}"
+            messages = self._create_messages_for_model(base64_image)
+            return self._analyze_image_with_model(messages)
             
             # Detect model type (OpenAI vs Anthropic)
             is_anthropic = "anthropic" in str(type(self.model)).lower()
