@@ -16,8 +16,7 @@ from docling.datamodel.base_models import InputFormat, ConversionStatus
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.pipeline.standard_pdf_pipeline import StandardPdfPipeline
 from docling.utils.export import generate_multimodal_pages
-
-from graphs.chat_graph import get_model
+from models.model_factory import ModelFactory
 
 # Set up logging with more detailed format
 logging.basicConfig(
@@ -65,7 +64,7 @@ class DoclingProcessor:
         )
         
         # Get vision-capable model for image analysis
-        self.model = get_model()
+        self.model = ModelFactory.create_model()
     
     def process_document(self, file_path: str) -> Dict[str, Any]:
         """Process a document using Docling and return structured information."""

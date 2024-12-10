@@ -12,7 +12,7 @@ from models.model_factory import ModelFactory
 from models.retriever import create_retriever_tool
 from models.vectorstore import get_vectorstore
 from services.chat_node_service import ChatNodeService
-from config.prompt_config import GRADER_PROMPT
+from config.prompt_config import GRADER_PROMPT, ANSWER_PROMPT
 
 logger = logging.getLogger(__name__)
 memory = MemorySaver()
