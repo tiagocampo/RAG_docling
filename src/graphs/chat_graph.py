@@ -137,28 +137,44 @@ def web_search(state: GraphState) -> Dict[str, Any]:
             "generation": f"Error performing web search: {str(e)}"
         }
 
-def grade_documents(state: GraphState) -> str:
+def grade_documents(state: GraphState) -> Dict[str, Any]:
     """Grade retrieved documents and decide next step."""
     documents = state["documents"]
     question = state["current_question"]
     
-    # Grade documents
-    grade = grading_service.grade_documents(question, documents)
-    logger.info(f"Document relevance: {grade}")
-    
-    if grade.binary_score == "yes":
-        return "generate"
-    
-    # Increment failed retrievals
-    state["failed_retrievals"] = state.get("failed_retrievals", 0) + 1
-    
-    # Check if we should try web search
-    if state["source"] == "vectorstore" and routing_service.should_use_web_search(
-        question, state["failed_retrievals"]
-    ):
-        return "web_search"
-    
-    return "rewrite"
+    try:
+        # Grade documents
+        grade = grading_service.grade_documents(question, documents)
+        logger.info(f"Document relevance: {grade}")
+        
+        # Increment failed retrievals if documents are not relevant
+        failed_retrievals = state.get("failed_retrievals", 0)
+        if grade.binary_score == "no":
+            failed_retrievals += 1
+        
+        # Determine next step
+        next_step = "generate"
+        if grade.binary_score == "no":
+            if state["source"] == "vectorstore" and routing_service.should_use_web_search(
+                question, failed_retrievals
+            ):
+                next_step = "web_search"
+            else:
+                next_step = "rewrite"
+        
+        return {
+            **state,
+            "failed_retrievals": failed_retrievals,
+            "next": next_step,
+            "grade_explanation": grade.explanation
+        }
+    except Exception as e:
+        logger.error(f"Error in document grading: {str(e)}")
+        return {
+            **state,
+            "next": "generate",  # Default to generate on error
+            "generation": f"Error in document grading: {str(e)}"
+        }
 
 def rewrite_question(state: GraphState) -> Dict[str, Any]:
     """Rewrite the question for better retrieval."""
@@ -260,7 +276,7 @@ def create_chat_graph():
     
     workflow.add_conditional_edges(
         "grade_documents",
-        grade_documents,
+        lambda x: x["next"],  # Use the next field from state
         {
             "generate": "generate",
             "rewrite": "rewrite",
