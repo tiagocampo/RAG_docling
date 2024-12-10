@@ -213,5 +213,15 @@ def process_question(question: str) -> Dict[str, Any]:
     """Process a question through the graph."""
     graph = create_chat_graph()
     initial_state = initialize_state(question)
-    result = graph.invoke(initial_state)
+    
+    # Create configuration for the memory checkpointer
+    config = {
+        "configurable": {
+            "thread_id": st.session_state.get("chat_id", "default"),
+            "checkpoint_ns": "chat_history",
+            "checkpoint_id": f"chat_{st.session_state.get('chat_id', 'default')}"
+        }
+    }
+    
+    result = graph.invoke(initial_state, config=config)
     return result
