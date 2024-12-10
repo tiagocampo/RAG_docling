@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()  # Load environment variables from .env file
+
 import streamlit as st
 from components.file_uploader import FileUploader
 from components.chat_interface import ChatInterface

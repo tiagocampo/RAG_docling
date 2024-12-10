@@ -2,6 +2,9 @@ import streamlit as st
 import os
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Define available models and their configurations
 AVAILABLE_MODELS = {
@@ -42,23 +45,47 @@ AVAILABLE_MODELS = {
 # Default model
 DEFAULT_MODEL = "GPT-4o"
 
+def check_api_keys():
+    """Check if required API keys are set in environment variables."""
+    openai_key = os.getenv("OPENAI_API_KEY")
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    
+    if not openai_key:
+        st.error("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
+        logger.error("OpenAI API key not found in environment variables")
+    
+    if not anthropic_key:
+        st.error("Anthropic API key not found. Please set the ANTHROPIC_API_KEY environment variable.")
+        logger.error("Anthropic API key not found in environment variables")
+    
+    return openai_key is not None and anthropic_key is not None
+
 def get_model():
     """Get the model based on configuration."""
+    # Check API keys first
+    if not check_api_keys():
+        raise ValueError("Required API keys not found in environment variables")
+    
     selected_model = st.session_state.get("model_name", DEFAULT_MODEL)
     model_config = AVAILABLE_MODELS[selected_model]
     
-    if model_config["provider"] == "anthropic":
-        return ChatAnthropic(
-            model=model_config["name"],
-            temperature=model_config["temperature"],
-            max_tokens=model_config["max_tokens"],
-            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
-            streaming=model_config["streaming"]
-        )
-    else:  # OpenAI
-        return ChatOpenAI(
-            model=model_config["name"],
-            temperature=model_config["temperature"],
-            max_tokens=model_config["max_tokens"],
-            streaming=model_config["streaming"]
-        ) 
+    try:
+        if model_config["provider"] == "anthropic":
+            return ChatAnthropic(
+                model=model_config["name"],
+                temperature=model_config["temperature"],
+                max_tokens=model_config["max_tokens"],
+                anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+                streaming=model_config["streaming"]
+            )
+        else:  # OpenAI
+            return ChatOpenAI(
+                model=model_config["name"],
+                temperature=model_config["temperature"],
+                max_tokens=model_config["max_tokens"],
+                streaming=model_config["streaming"],
+                api_key=os.getenv("OPENAI_API_KEY")  # Explicitly pass the API key
+            )
+    except Exception as e:
+        logger.error(f"Error initializing model: {str(e)}")
+        raise ValueError(f"Failed to initialize model: {str(e)}") 
