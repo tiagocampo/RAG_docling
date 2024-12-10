@@ -2,7 +2,6 @@ import streamlit as st
 from typing import List, Tuple, Dict, Any
 from langchain_core.messages import AIMessage, HumanMessage
 from graphs.chat_graph import create_chat_graph
-from config.model_config import AVAILABLE_MODELS, DEFAULT_MODEL
 import asyncio
 import uuid
 import os
@@ -20,7 +19,7 @@ class ChatInterface:
             st.session_state.chat_id = str(uuid.uuid4())
         
         # Create chat graph
-        self.chat_graph = create_chat_graph()
+        self.graph = create_chat_graph()
     
     def render(self):
         # Initialize chat history and summary
