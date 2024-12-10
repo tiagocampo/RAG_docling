@@ -26,7 +26,21 @@ class ChatInterface:
         
         # Chat input - Place it at the bottom using columns
         col1, col2 = st.columns([6, 1])
+        with col1:
+            # Store the input in session state
+            if "user_input" not in st.session_state:
+                st.session_state.user_input = ""
+            
+            prompt = st.text_input(
+                "Ask a question about your documents",
+                key="chat_input",
+                value=st.session_state.user_input,
+                label_visibility="collapsed"
+            )
         
+        with col2:
+            send_button = st.button("Send", use_container_width=True)
+            
         # Display chat messages
         messages_container = st.container()
         
@@ -39,11 +53,11 @@ class ChatInterface:
                     with st.chat_message("assistant"):
                         st.write(message.content)
         
-        # Chat input at the bottom
-        with col1:
-            prompt = st.chat_input("Ask a question about your documents")
+        # Process the input
+        if send_button and prompt:
+            # Clear the input
+            st.session_state.user_input = ""
             
-        if prompt:
             # Add user message
             user_message = HumanMessage(content=prompt)
             st.session_state.messages.append(user_message)
@@ -59,5 +73,10 @@ class ChatInterface:
                         assistant_message = AIMessage(content=response)
                         st.session_state.messages.append(assistant_message)
                         
-                        # Rerun to update the display
-                        st.rerun()
+                        st.write(response)
+                    except Exception as e:
+                        error_msg = f"An error occurred: {str(e)}"
+                        st.error(error_msg)
+            
+            # Rerun to update the interface
+            st.rerun()
