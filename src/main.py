@@ -5,6 +5,7 @@ import streamlit as st
 from components.file_uploader import FileUploader
 from components.chat_interface import ChatInterface
 from utils.session_state import initialize_session_state
+from utils.langsmith_config import initialize_langsmith, is_langsmith_configured
 from models.model_manager import AVAILABLE_MODELS, DEFAULT_MODEL
 import os
 
@@ -14,6 +15,12 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Initialize LangSmith client
+if is_langsmith_configured():
+    langsmith_client = initialize_langsmith()
+    if langsmith_client:
+        st.session_state.langsmith_client = langsmith_client
 
 def display_document_structure():
     """Display the structure of processed documents."""
