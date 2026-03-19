@@ -43,4 +43,5 @@ Thumbs.db
 
 # Project specific
 local_qdrant/
-qdrant_storage/ 
+qdrant_storage/
+.venv/
